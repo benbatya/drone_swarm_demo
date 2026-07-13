@@ -1,9 +1,12 @@
 import {
   BASE_TICKS_PER_SEC,
+  makeConfig,
   MAX_TICKS_PER_FRAME,
+  TICKS_PER_SEASON,
   type SimConfig,
 } from './config'
 import { addPending } from './belief/consoleBelief'
+import type { DarkWindow } from './comms/blackout'
 import type { Directive } from './directives/types'
 import { makeRng, type Rng } from './rng'
 import { buildSnapshot, type TruthSnapshot } from './snapshot'
@@ -31,10 +34,11 @@ declare global {
  * via the per-frame callback.
  */
 export class SimRunner {
-  readonly cfg: SimConfig
+  cfg: SimConfig
   private world: GroundTruth
   private rng: Rng
 
+  private seasonComplete = false
   private version = 0
   /** Rebuilt every frame; handed to frame listeners (the map). */
   private frameSnapshot: TruthSnapshot
@@ -67,6 +71,7 @@ export class SimRunner {
       running: this.running,
       speed: this.speed,
       version: this.version,
+      seasonComplete: this.seasonComplete,
     })
   }
 
@@ -171,6 +176,49 @@ export class SimRunner {
     this.publishHook()
   }
 
+  isSeasonComplete(): boolean {
+    return this.seasonComplete
+  }
+
+  /** Read a drone's blackout schedule for the God-Mode timeline strip. */
+  getBlackout(
+    id: string,
+  ): { windows: DarkWindow[]; now: number; lastSyncAt: number } | null {
+    const d = this.world.drones.find((x) => x.id === id)
+    if (!d) return null
+    return {
+      windows: d.comms.darkWindows,
+      now: this.world.tick,
+      lastSyncAt: d.comms.lastSyncAt,
+    }
+  }
+
+  /** Rebuild the world with new config overrides (left paused). */
+  reconfigure(overrides: Partial<SimConfig>): void {
+    this.pause()
+    this.cfg = makeConfig({ ...this.cfg, ...overrides })
+    this.rng = makeRng(this.cfg.seed)
+    this.world = createWorld(this.cfg)
+    this.seasonComplete = false
+    this.acc = 0
+    this.lastTs = 0
+    this.frameSnapshot = this.build()
+    this.storeSnapshot = this.frameSnapshot
+    this.emitStore()
+    this.publishHook()
+  }
+
+  /** Apply config overrides and start a fresh season. */
+  applyConfig(overrides: Partial<SimConfig>): void {
+    this.reconfigure(overrides)
+    this.start()
+  }
+
+  /** Restart the current season from tick 0. */
+  restart(): void {
+    this.applyConfig({})
+  }
+
   dispose(): void {
     this.pause()
     this.storeListeners.clear()
@@ -199,6 +247,11 @@ export class SimRunner {
     }
     this.publishHook()
 
+    if (this.world.tick >= TICKS_PER_SEASON) {
+      this.seasonComplete = true
+      this.pause() // stops the loop, rebuilds with seasonComplete = true
+      return
+    }
     this.rafId = requestAnimationFrame(this.loop)
   }
 }

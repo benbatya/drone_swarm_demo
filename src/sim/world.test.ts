@@ -34,6 +34,9 @@ describe('world season', () => {
       expect(a.score.fireMinutes).toBe(b.score.fireMinutes)
       expect(a.score.totalFires).toBe(b.score.totalFires)
       expect(a.fires.size).toBe(b.fires.size)
+      // Comms/belief are deterministic too.
+      expect(a.console.fires.size).toBe(b.console.fires.size)
+      expect(a.drones[0].comms.lastSyncAt).toBe(b.drones[0].comms.lastSyncAt)
       expect(Number.isNaN(a.score.fireMinutes)).toBe(false)
       expect(a.score.fireMinutes).toBeGreaterThan(0)
     },

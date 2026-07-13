@@ -151,7 +151,12 @@ describe('console staleness derivation', () => {
     return w
   }
   const stalenessAt = (age: number) => {
-    const snap = buildSnapshot(snapWithAge(age), { running: true, speed: 1, version: 1 })
+    const snap = buildSnapshot(snapWithAge(age), {
+      running: true,
+      speed: 1,
+      version: 1,
+      seasonComplete: false,
+    })
     return snap.console.drones.find((d) => d.id === 'redding-1')!.staleness
   }
 
