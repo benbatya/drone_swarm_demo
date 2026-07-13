@@ -4,6 +4,7 @@ import { makeRng } from '../rng'
 import { makeDroneBelief, type DroneBelief } from '../belief/droneBelief'
 import { makeCommsState, type DroneCommsState } from '../comms/blackout'
 import { makeScanExec } from '../directives/scanExec'
+import { scanSectorFor } from './scanSectors'
 import type {
   Directive,
   DirectiveExec,
@@ -77,10 +78,12 @@ export function createFleet(cfg: SimConfig): DroneTruth[] {
   let globalIdx = 0
   for (const base of BASES) {
     const home = lngLatToMeters(base.lng, base.lat)
-    const rect = homeSectorRect(home, cfg.patrolBoxKm)
     for (let i = 0; i < cfg.dronesPerBase; i++) {
+      const id = `${base.id}-${i + 1}`
+      // Fixed assigned scan sector; fall back to a home box for exotic fleets.
+      const rect = scanSectorFor(id) ?? homeSectorRect(home, cfg.patrolBoxKm)
       drones.push({
-        id: `${base.id}-${i + 1}`,
+        id,
         homeBaseId: base.id,
         homePos: home,
         pos: { x: home.x, y: home.y },

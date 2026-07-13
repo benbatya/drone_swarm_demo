@@ -91,6 +91,7 @@ export function MapCanvas({ source }: { source: Tab }) {
               onSelectDrone: s.selectDrone,
               onSelectFire: s.selectFire,
               draftRect: s.draftRect,
+              selectedDroneId: s.selection?.kind === 'drone' ? s.selection.id : null,
             }),
           ],
         })
@@ -103,6 +104,9 @@ export function MapCanvas({ source }: { source: Tab }) {
       rebuild()
     }
     const unsub = runner.onFrame(onFrame)
+    // Rebuild on UI-state changes (selection, tab, draft rect) so overlays like
+    // the selected drone's scan sector update even while the sim is paused.
+    const unsubStore = useUIStore.subscribe(() => rebuild())
     map.on('load', rebuild)
     map.on('move', rebuild)
 
@@ -138,6 +142,7 @@ export function MapCanvas({ source }: { source: Tab }) {
 
     return () => {
       unsub()
+      unsubStore()
       map.remove()
       rebuildRef.current = () => {}
     }

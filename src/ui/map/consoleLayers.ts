@@ -1,5 +1,8 @@
 import type { Layer } from '@deck.gl/core'
-import { LineLayer, PolygonLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
+import { LineLayer, PathLayer, PolygonLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
+import { BASES } from '../../sim/config'
+import { buildLawnmower } from '../../sim/directives/scanExec'
+import { parseDroneId, scanSectorFor } from '../../sim/drones/scanSectors'
 import { lngLatToMeters, metersToLngLat } from '../../sim/geo'
 import type { ConsoleDroneView, ConsoleView, FireView } from '../../sim/snapshot'
 import type { DraftRect } from '../store'
@@ -9,6 +12,52 @@ export interface ConsoleLayerOpts {
   onSelectDrone?: (id: string) => void
   onSelectFire?: (cellId: number) => void
   draftRect?: DraftRect | null
+  /** Selected drone id — its fixed scan sector + path overlay is drawn in gray. */
+  selectedDroneId?: string | null
+}
+
+type LL = [number, number]
+const toLL = (x: number, y: number): LL => {
+  const ll = metersToLngLat(x, y)
+  return [ll.lng, ll.lat]
+}
+
+/** Gray scan-sector rectangle + lawnmower path for the selected drone (console). */
+function scanSectorLayers(id: string): Layer[] {
+  const rect = scanSectorFor(id)
+  if (!rect) return []
+  const ring: LL[] = [
+    toLL(rect.minX, rect.minY),
+    toLL(rect.maxX, rect.minY),
+    toLL(rect.maxX, rect.maxY),
+    toLL(rect.minX, rect.maxY),
+  ]
+  // Enter from the drone's home base, matching its actual autoPatrol path.
+  const base = BASES.find((b) => b.id === parseDroneId(id)?.baseId)
+  const entry = base ? lngLatToMeters(base.lng, base.lat) : { x: rect.minX, y: rect.minY }
+  const path: LL[] = buildLawnmower(rect, entry).map((w) => toLL(w.x, w.y))
+  return [
+    new PolygonLayer<{ ring: LL[] }>({
+      id: 'console-scan-region',
+      data: [{ ring }],
+      getPolygon: (d) => d.ring,
+      filled: true,
+      getFillColor: [128, 128, 128, 120], // 50%-transparent gray
+      stroked: true,
+      getLineColor: [170, 170, 170, 190],
+      lineWidthUnits: 'pixels',
+      getLineWidth: 1,
+    }),
+    new PathLayer<{ path: LL[] }>({
+      id: 'console-scan-path',
+      data: [{ path }],
+      getPath: (d) => d.path,
+      // Lighter gray so the lawnmower path reads on top of the sector fill.
+      getColor: [205, 205, 205, 225],
+      getWidth: 2,
+      widthUnits: 'pixels',
+    }),
+  ]
 }
 
 /** Endpoint `dist` meters from `pos` along compass bearing `heading`. */
@@ -30,6 +79,9 @@ const col = (d: ConsoleDroneView, alpha: number): [number, number, number, numbe
 
 export function consoleLayers(cv: ConsoleView, opts: ConsoleLayerOpts): Layer[] {
   const layers: Layer[] = []
+  // Selected drone's fixed scan sector + path — drawn first so it sits beneath
+  // the fire/drone markers.
+  if (opts.selectedDroneId) layers.push(...scanSectorLayers(opts.selectedDroneId))
   const withPos = cv.drones.filter((d) => d.reportedPosition && d.ghostPosition)
   const withGhost = withPos.filter((d) => d.uncertaintyRadiusM > 0)
 
