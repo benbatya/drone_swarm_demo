@@ -6,6 +6,7 @@ import { createWorld, tickWorld, type GroundTruth } from '../world'
 import type { DroneCommsState } from './blackout'
 import { generateDarkWindows } from './blackout'
 import { stepGossip } from './gossip'
+import { stepSync } from './sync'
 
 const cfg0 = () => makeConfig({ ignitionLambdaPerMin: 0 })
 const alwaysDark = (): DroneCommsState['darkWindows'] => [
@@ -77,6 +78,24 @@ describe('sync', () => {
     expect(deltas.slice(0, 6)).toEqual([16, 8, 4, 2, 1, 1])
     // Never contacted the console.
     expect(w.console.drones.get(d.id)!.reported).toBeNull()
+  })
+
+  it('keeps a docked drone in contact every tick despite a scheduled blackout', () => {
+    // At base a drone is hard-lined: even in a permanent dark window, and even
+    // when a sync is not "due", it refreshes the console every tick so it can
+    // never drift stale/missing while sitting at a base.
+    const w = createWorld(cfg0())
+    const d = w.drones[0]
+    d.comms.darkWindows = alwaysDark()
+    d.comms.cursor = 0
+    d.comms.nextSyncAt = 999_999 // far from due
+    d.comms.lastSyncAt = -Infinity
+    d.status = 'docked'
+    for (const t of [5, 6, 7]) {
+      w.tick = t
+      stepSync(w)
+      expect(w.console.drones.get(d.id)!.lastContactAt).toBe(t)
+    }
   })
 })
 

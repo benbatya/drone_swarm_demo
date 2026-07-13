@@ -57,8 +57,16 @@ export const WORLD_CENTER = {
 export const TICKS_PER_DAY = 1440 // 1 tick = 1 sim-minute
 export const SEASON_DAYS = 30
 export const TICKS_PER_SEASON = TICKS_PER_DAY * SEASON_DAYS // 43,200
-/** Sim ticks advanced per real second at ×1 speed (≈ frames @ 30fps). */
-export const BASE_TICKS_PER_SEC = 30
+/**
+ * Wall-clock seconds per sim-tick at ×1 realtime (1 tick = 1 sim-minute).
+ * The speed multiplier is literal "× realtime": tick rate = speed / REAL_SEC_PER_TICK
+ * ticks per second. So ×1800 → 30 ticks/s (one tick every 1/30 s), ×30 → 0.5 ticks/s.
+ */
+export const REAL_SEC_PER_TICK = 60
+/** Playback speed multipliers (× realtime). */
+export const SPEED_MULTIPLIERS = [30, 120, 480, 960, 1800] as const
+/** Default playback speed (× realtime) — gentlest, closest to realtime. */
+export const DEFAULT_SPEED = 30
 /** Upper bound on ticks processed in a single rAF frame (fast-forward cap). */
 export const MAX_TICKS_PER_FRAME = 600
 

@@ -29,7 +29,7 @@ test('sim boots, runs >=1000 frames, and advances state with no console errors',
   await expect(page.locator('.fleet-row')).toHaveCount(8)
 
   // Fast-forward so the season advances quickly.
-  await page.getByTestId('speed-60').click()
+  await page.getByTestId('speed-1800').click()
 
   const s1 = await page.evaluate(readSim)
   expect(s1).toBeTruthy()

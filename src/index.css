@@ -393,6 +393,19 @@ body {
   color: #8496b2;
   margin-bottom: 4px;
 }
+.comms-status {
+  font-size: 0.82em;
+  margin-bottom: 4px;
+}
+.comms-status.connected {
+  color: #5ce0a0;
+}
+.comms-status.routine {
+  color: #d99b3f;
+}
+.comms-status.deep {
+  color: #e26565;
+}
 .strip {
   position: relative;
   height: 14px;
@@ -400,6 +413,9 @@ body {
   border: 1px solid #1c2740;
   border-radius: 4px;
   overflow: hidden;
+}
+.strip.docked {
+  background: #2f7a5a; /* at base: solidly connected */
 }
 .strip-seg {
   position: absolute;

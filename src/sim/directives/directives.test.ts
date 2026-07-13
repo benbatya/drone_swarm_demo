@@ -119,12 +119,18 @@ describe('fuel policy', () => {
     const w = world()
     const r = rng()
     const d = w.drones[0]
+    // Fly it far from every base so the forced RTB is a real transit (stays
+    // airborne this tick) — otherwise it docks at base and the hard-lined
+    // every-tick sync would report and clear abortedIds within the same tick.
+    d.pos = { x: 30_000, y: 300_000 }
+    d.comms.nextSyncAt = 1_000_000 // no sync this tick, so abortedIds persists
     enqueue(d, mkScan(5, 1000, rectAround(d)))
     const scanId = d.execDirId!
     d.fuelL = w.cfg.lowFuelFloorL - 1
 
     tickWorld(w, r)
 
+    expect(d.status).toBe('airborne')
     expect(d.override?.kind).toBe('rtb')
     expect(d.forcedRtb).toBe(true)
     expect(d.abortedIds).toContain(scanId)

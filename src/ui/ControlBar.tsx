@@ -1,7 +1,8 @@
+import { SPEED_MULTIPLIERS } from '../sim/config'
 import { useRunner } from './RunnerContext'
 import { useSimSnapshot } from './useSimSnapshot'
 
-const SPEEDS = [1, 4, 16, 60]
+const SPEEDS = SPEED_MULTIPLIERS
 
 export function ControlBar() {
   const runner = useRunner()
