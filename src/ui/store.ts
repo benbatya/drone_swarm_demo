@@ -8,6 +8,13 @@ export type Selection =
   | { kind: 'fire'; cellId: CellId }
   | null
 
+export interface DraftRect {
+  west: number
+  south: number
+  east: number
+  north: number
+}
+
 interface UIState {
   activeTab: Tab
   setTab: (t: Tab) => void
@@ -15,6 +22,8 @@ interface UIState {
   selectDrone: (id: string) => void
   selectFire: (cellId: CellId) => void
   clearSelection: () => void
+  draftRect: DraftRect | null
+  setDraftRect: (r: DraftRect | null) => void
 }
 
 // Local, console-side UI state. The two tabs share one view component and
@@ -26,4 +35,6 @@ export const useUIStore = create<UIState>((set) => ({
   selectDrone: (id) => set({ selection: { kind: 'drone', id } }),
   selectFire: (cellId) => set({ selection: { kind: 'fire', cellId } }),
   clearSelection: () => set({ selection: null }),
+  draftRect: null,
+  setDraftRect: (r) => set({ draftRect: r }),
 }))

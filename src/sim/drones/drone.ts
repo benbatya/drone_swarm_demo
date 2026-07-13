@@ -1,5 +1,8 @@
 import { BASES, WORLD_H_M, WORLD_W_M, type SimConfig } from '../config'
-import { lngLatToMeters, type CellId, type Vec2 } from '../geo'
+import { lngLatToMeters, type Vec2 } from '../geo'
+import { makeRng } from '../rng'
+import { makeDroneBelief, type DroneBelief } from '../belief/droneBelief'
+import { makeCommsState, type DroneCommsState } from '../comms/blackout'
 import { makeScanExec } from '../directives/scanExec'
 import type {
   Directive,
@@ -25,8 +28,10 @@ export interface DroneTruth {
   /** Turnaround countdown while docked (sim-minutes). */
   dockRemainingMin: number
 
-  /** Fires this drone has personally detected (precursor to DroneBelief, M3). */
-  knownFires: Set<CellId>
+  /** This drone's belief: fires from own detection + gossip. */
+  belief: DroneBelief
+  /** Blackout schedule + sync scheduling state. */
+  comms: DroneCommsState
 
   // Directive execution
   queue: Directive[]
@@ -66,6 +71,10 @@ export function homeSectorRect(home: Vec2, sideKm: number): RectM {
 /** Build the initial fleet: `dronesPerBase` drones at each base, full tanks. */
 export function createFleet(cfg: SimConfig): DroneTruth[] {
   const drones: DroneTruth[] = []
+  // Dedicated deterministic stream for per-drone blackout schedules, kept
+  // independent of the tick RNG so comms don't perturb ignition and vice versa.
+  const commsRng = makeRng((cfg.seed ^ 0x5eed) >>> 0)
+  let globalIdx = 0
   for (const base of BASES) {
     const home = lngLatToMeters(base.lng, base.lat)
     const rect = homeSectorRect(home, cfg.patrolBoxKm)
@@ -80,7 +89,8 @@ export function createFleet(cfg: SimConfig): DroneTruth[] {
         retardant: cfg.retardantLoads,
         status: 'airborne',
         dockRemainingMin: 0,
-        knownFires: new Set<CellId>(),
+        belief: makeDroneBelief(),
+        comms: makeCommsState(commsRng.fork(globalIdx++), cfg),
         queue: [],
         exec: null,
         execDirId: null,

@@ -92,6 +92,27 @@ export interface SimConfig {
   autoEngageRangeKm: number
   /** Home-sector autoPatrol box side length (km). */
   patrolBoxKm: number
+
+  // --- Comms ---
+  /** Normal drone-initiated sync cadence (sim-min). */
+  syncCadenceMin: number
+  /** First retry interval after a failed sync (then halves to 1). */
+  syncRetryStartMin: number
+  /** Contact age (min) past which the console reports a drone MISSING. */
+  missingThresholdMin: number
+  /** Contact age (min) past which the console shows an amber "stale" cue. */
+  staleThresholdMin: number
+  /** Connected-window duration bounds (min). */
+  connMinMin: number
+  connMaxMin: number
+  /** Routine dark-window duration bounds (min). */
+  routineDarkMinMin: number
+  routineDarkMaxMin: number
+  /** Probability a given dark window is a deep outage. */
+  deepOutageProb: number
+  /** Deep-outage duration bounds (min). */
+  deepDarkMinMin: number
+  deepDarkMaxMin: number
 }
 
 const BASE_CONFIG: Omit<SimConfig, 'fuelBurnLPerMin'> = {
@@ -111,6 +132,17 @@ const BASE_CONFIG: Omit<SimConfig, 'fuelBurnLPerMin'> = {
   baseExclusionM: 1000,
   autoEngageRangeKm: 168,
   patrolBoxKm: 200,
+  syncCadenceMin: 32,
+  syncRetryStartMin: 16,
+  missingThresholdMin: 64,
+  staleThresholdMin: 40,
+  connMinMin: 15,
+  connMaxMin: 35,
+  routineDarkMinMin: 10,
+  routineDarkMaxMin: 40,
+  deepOutageProb: 0.05,
+  deepDarkMinMin: 80,
+  deepDarkMaxMin: 220,
 }
 
 /** Build a SimConfig, deriving fuelBurnLPerMin so range/capacity stay consistent. */

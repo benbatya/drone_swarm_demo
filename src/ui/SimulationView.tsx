@@ -1,10 +1,11 @@
 import { MapCanvas } from './map/MapCanvas'
+import { ConsolePanel } from './panels/ConsolePanel'
 import { GodPanel } from './panels/GodPanel'
 import type { Tab } from './store'
 
 // One view component, two tabs. `source` selects believed vs ground-truth data
-// and the title. God Mode gets the truth side panel; the User Console panel
-// (belief + directive composer) arrives in M3.
+// and the title. God Mode renders truth; the User Console renders the console's
+// belief (staleness cues, dead-reckoned ghosts, missing) + directive composer.
 export function SimulationView({ source }: { source: Tab }) {
   const title =
     source === 'truth'
@@ -20,18 +21,7 @@ export function SimulationView({ source }: { source: Tab }) {
           <MapCanvas source={source} />
         </div>
         <aside className="side-panel">
-          {source === 'truth' ? (
-            <GodPanel />
-          ) : (
-            <div className="panel">
-              <div className="panel-title">User Console</div>
-              <p className="muted">
-                Belief-based console view (staleness cues, dead reckoning,
-                directive composer) arrives in M3. This tab currently mirrors
-                ground truth.
-              </p>
-            </div>
-          )}
+          {source === 'truth' ? <GodPanel /> : <ConsolePanel />}
         </aside>
       </div>
     </section>

@@ -8,6 +8,9 @@ import { applyFuelPolicy } from './drones/fuelPolicy'
 import { activateHead, completeHead } from './directives/queue'
 import { stepExec } from './directives/executor'
 import type { DirectiveExec } from './directives/types'
+import { makeConsoleBelief, type ConsoleBelief } from './belief/consoleBelief'
+import { stepGossip } from './comms/gossip'
+import { stepSync } from './comms/sync'
 import type { Rng } from './rng'
 
 export interface GroundTruth {
@@ -16,32 +19,35 @@ export interface GroundTruth {
   fires: Map<CellId, FireTruth>
   drones: DroneTruth[]
   score: Score
+  /** Console-side belief — written only by the comms sync path + operator input. */
+  console: ConsoleBelief
 }
 
 export function createWorld(cfg: SimConfig): GroundTruth {
+  const drones = createFleet(cfg)
   return {
     cfg,
     tick: 0,
     fires: new Map(),
-    drones: createFleet(cfg),
+    drones,
     score: makeScore(),
+    console: makeConsoleBelief(drones.map((d) => d.id)),
   }
 }
 
-/** Nearest active fire the drone knows about within `rangeM`, or null. */
+/** Nearest fire the drone BELIEVES active within `rangeM`, or null. */
 function nearestKnownActiveFire(
   d: DroneTruth,
-  w: GroundTruth,
   rangeM: number,
 ): CellId | null {
   let best: CellId | null = null
   let bestD = Infinity
-  for (const cid of d.knownFires) {
-    if (!w.fires.has(cid)) continue
-    const dist = distance(d.pos, cellCenter(cid))
+  for (const kf of d.belief.fires.values()) {
+    if (kf.believedOut) continue
+    const dist = distance(d.pos, cellCenter(kf.cellId))
     if (dist <= rangeM && dist < bestD) {
       bestD = dist
-      best = cid
+      best = kf.cellId
     }
   }
   return best
@@ -58,7 +64,7 @@ function pickActive(d: DroneTruth, w: GroundTruth): { exec: DirectiveExec; slot:
   }
   // Autonomous idle: self-engage nearest known in-range fire, else autoPatrol.
   const rangeM = w.cfg.autoEngageRangeKm * 1000
-  const best = d.retardant > 0 ? nearestKnownActiveFire(d, w, rangeM) : null
+  const best = d.retardant > 0 ? nearestKnownActiveFire(d, rangeM) : null
   if (best !== null) {
     if (!(d.autoExec?.kind === 'extinguish' && d.autoExec.cellId === best)) {
       d.autoExec = { kind: 'extinguish', cellId: best }
@@ -110,9 +116,13 @@ export function tickWorld(w: GroundTruth, rng: Rng): void {
         d.crashedAt = now
         continue
       }
-      stepDetection(d, w.fires, cfg)
+      stepDetection(d, w.fires, now, cfg)
     }
   }
+
+  // Intra-swarm mesh (blackout-independent), then the console link.
+  stepGossip(w)
+  stepSync(w)
 
   accrue(w.score, w.fires.size)
 }
