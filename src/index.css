@@ -1,0 +1,126 @@
+:root {
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: #070b14;
+  color: #dbe4f0;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: #0d1526;
+  border-bottom: 1px solid #1c2740;
+}
+.brand {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.brand-sub {
+  opacity: 0.55;
+  font-weight: 400;
+  margin-left: 8px;
+  font-size: 0.82em;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+}
+.tab {
+  background: #121c30;
+  color: #9fb0c8;
+  border: 1px solid #23314e;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+.tab.active {
+  background: #1c3a63;
+  color: #eaf2ff;
+  border-color: #3a5c8c;
+}
+
+.controlbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  background: #0a1120;
+  border-bottom: 1px solid #16203a;
+  font-size: 0.85em;
+}
+.controlbar .ctrl {
+  background: #111a2c;
+  color: #8fa2bd;
+  border: 1px solid #22304c;
+  border-radius: 5px;
+  padding: 3px 9px;
+  font: inherit;
+  cursor: pointer;
+}
+.controlbar .ctrl:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.speeds {
+  display: flex;
+  gap: 4px;
+}
+.clock {
+  margin-left: auto;
+  opacity: 0.85;
+}
+.score {
+  color: #ffb454;
+}
+
+.stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.sim-view {
+  position: absolute;
+  inset: 0;
+}
+.view-title {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  left: 12px;
+  background: rgba(9, 14, 26, 0.82);
+  border: 1px solid #22304c;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.8em;
+  letter-spacing: 0.03em;
+  pointer-events: none;
+}
+.map-canvas {
+  position: absolute;
+  inset: 0;
+}
+.maplibregl-map {
+  background: #0b1220;
+}
