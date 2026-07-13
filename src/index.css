@@ -234,7 +234,7 @@ body {
   height: 8px;
   border-radius: 50%;
   flex: none;
-  background: #5acdff;
+  background: #50dc82; /* airborne / current = green */
 }
 .dot.docked {
   background: #96a0b4;
@@ -258,24 +258,24 @@ body {
   margin-top: 4px;
 }
 
-/* Staleness cues */
+/* Staleness cues: fresh (green) fades to blue as contact ages */
 .dot.stale-fresh {
-  background: #5acdff;
+  background: #50dc82;
 }
 .dot.stale-stale {
-  background: #ffb454;
+  background: #5bb9d6;
 }
 .dot.stale-missing {
-  background: #ff5050;
+  background: #4682ff;
 }
 .dot.stale-unknown {
-  background: #66738c;
+  background: #4682ff;
 }
 .stale-text-stale {
-  color: #ffb454;
+  color: #7fb4e0;
 }
 .stale-text-missing {
-  color: #ff6a6a;
+  color: #6a9cff;
 }
 
 /* Console panel + directive composer */
