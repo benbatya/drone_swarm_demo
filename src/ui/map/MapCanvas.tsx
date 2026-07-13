@@ -4,12 +4,14 @@ import maplibregl, { type StyleSpecification } from 'maplibre-gl'
 import { useEffect, useRef } from 'react'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { WORLD_CENTER } from '../../sim/config'
+import type { TruthSnapshot } from '../../sim/snapshot'
+import { useRunner } from '../RunnerContext'
 import type { Tab } from '../store'
 import { buildGraticule, type GridLine } from './graticule'
-import { baseLayers } from './layers'
+import { baseLayers, droneLayers, fireLayer } from './layers'
 
 // Flat inline style so the app boots fully offline (no tile/glyph fetches).
-// deck.gl TextLayer generates its own font atlas, so no MapLibre glyphs needed.
+// deck.gl generates its own text atlas, so no MapLibre glyphs are needed.
 const FLAT_STYLE: StyleSpecification = {
   version: 8,
   sources: {},
@@ -19,7 +21,14 @@ const FLAT_STYLE: StyleSpecification = {
 }
 
 export function MapCanvas({ source }: { source: Tab }) {
+  const runner = useRunner()
   const containerRef = useRef<HTMLDivElement>(null)
+  const snapRef = useRef<TruthSnapshot>(runner.getStoreSnapshot())
+  const sourceRef = useRef<Tab>(source)
+  const rebuildRef = useRef<() => void>(() => {})
+
+  // Keep the latest source without re-running the map-setup effect.
+  sourceRef.current = source
 
   useEffect(() => {
     const container = containerRef.current
@@ -42,6 +51,7 @@ export function MapCanvas({ source }: { source: Tab }) {
         { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() },
         map.getZoom(),
       )
+      const snap = snapRef.current
       overlay.setProps({
         layers: [
           new LineLayer<GridLine>({
@@ -54,17 +64,36 @@ export function MapCanvas({ source }: { source: Tab }) {
             widthUnits: 'pixels',
           }),
           ...baseLayers(),
+          ...fireLayer(snap.fires),
+          ...droneLayers(snap.drones, {
+            showDetection: sourceRef.current === 'truth',
+            detectionRadiusM: runner.cfg.detectionRadiusM,
+          }),
         ],
       })
     }
+    rebuildRef.current = rebuild
 
+    const onFrame = (s: TruthSnapshot) => {
+      snapRef.current = s
+      rebuild()
+    }
+    const unsub = runner.onFrame(onFrame)
     map.on('load', rebuild)
     map.on('move', rebuild)
 
     return () => {
+      unsub()
       map.remove()
+      rebuildRef.current = () => {}
     }
-  }, [])
+  }, [runner])
+
+  // Reflect a tab switch (detection circles are God-Mode only) without
+  // rebuilding the map.
+  useEffect(() => {
+    rebuildRef.current()
+  }, [source])
 
   return (
     <div ref={containerRef} className="map-canvas" data-source={source} data-testid="map-canvas" />

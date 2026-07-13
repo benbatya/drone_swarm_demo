@@ -83,6 +83,11 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+.controlbar .ctrl.active {
+  background: #1c3a63;
+  color: #eaf2ff;
+  border-color: #3a5c8c;
+}
 .speeds {
   display: flex;
   gap: 4px;

@@ -49,3 +49,69 @@ export const WORLD_CENTER = {
   lng: (BBOX.west + BBOX.east) / 2,
   lat: (BBOX.south + BBOX.north) / 2,
 } as const
+
+// ---------------------------------------------------------------------------
+// Simulation tunables
+// ---------------------------------------------------------------------------
+
+export const TICKS_PER_DAY = 1440 // 1 tick = 1 sim-minute
+export const SEASON_DAYS = 30
+export const TICKS_PER_SEASON = TICKS_PER_DAY * SEASON_DAYS // 43,200
+/** Sim ticks advanced per real second at ×1 speed (≈ frames @ 30fps). */
+export const BASE_TICKS_PER_SEC = 30
+/** Upper bound on ticks processed in a single rAF frame (fast-forward cap). */
+export const MAX_TICKS_PER_FRAME = 600
+
+export interface SimConfig {
+  seed: number
+  dronesPerBase: number
+  /** Cruise speed in meters per sim-minute. */
+  speedMPerMin: number
+  /** Fire detection radius (meters). */
+  detectionRadiusM: number
+  /** Drone↔drone gossip range (meters). */
+  gossipRangeM: number
+  fuelCapacityL: number
+  /** Operational range (km) — primary knob; fuelBurnLPerMin is derived from it. */
+  operationalRangeKm: number
+  /** Derived: liters burned per sim-minute aloft. */
+  fuelBurnLPerMin: number
+  /** Forced-RTB fuel floor (liters). */
+  lowFuelFloorL: number
+  retardantLoads: number
+  turnaroundMin: number
+  /** Mean new fires per sim-minute (Poisson λ). */
+  ignitionLambdaPerMin: number
+  /** No fire may ignite within this many meters of a base. */
+  baseExclusionM: number
+  /** Idle self-engage range (km). */
+  autoEngageRangeKm: number
+  /** Home-sector autoPatrol box side length (km). */
+  patrolBoxKm: number
+}
+
+const BASE_CONFIG: Omit<SimConfig, 'fuelBurnLPerMin'> = {
+  seed: 1337,
+  dronesPerBase: 2,
+  speedMPerMin: 1680,
+  detectionRadiusM: 50_000,
+  gossipRangeM: 50_000,
+  fuelCapacityL: 1000,
+  operationalRangeKm: 600,
+  lowFuelFloorL: 120,
+  retardantLoads: 10,
+  turnaroundMin: 60,
+  ignitionLambdaPerMin: 1 / 60,
+  baseExclusionM: 1000,
+  autoEngageRangeKm: 168,
+  patrolBoxKm: 200,
+}
+
+/** Build a SimConfig, deriving fuelBurnLPerMin so range/capacity stay consistent. */
+export function makeConfig(overrides: Partial<SimConfig> = {}): SimConfig {
+  const merged = { ...BASE_CONFIG, ...overrides }
+  const fuelBurnLPerMin =
+    (merged.fuelCapacityL * merged.speedMPerMin) /
+    (merged.operationalRangeKm * 1000)
+  return { ...merged, fuelBurnLPerMin }
+}
