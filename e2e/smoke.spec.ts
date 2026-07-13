@@ -25,6 +25,9 @@ test('sim boots, runs >=1000 frames, and advances state with no console errors',
   await expect(page.getByTestId('view-title')).toContainText('God Mode')
   await expect(page.locator('.map-canvas canvas').first()).toBeVisible({ timeout: 20_000 })
 
+  // God Mode fleet panel lists all 8 drones.
+  await expect(page.locator('.fleet-row')).toHaveCount(8)
+
   // Fast-forward so the season advances quickly.
   await page.getByTestId('speed-60').click()
 

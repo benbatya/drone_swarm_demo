@@ -109,6 +109,17 @@ body {
   position: absolute;
   inset: 0;
 }
+.sim-body {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  min-height: 0;
+}
+.map-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .view-title {
   position: absolute;
   z-index: 2;
@@ -128,4 +139,121 @@ body {
 }
 .maplibregl-map {
   background: #0b1220;
+}
+
+/* Side panel */
+.side-panel {
+  flex: 0 0 300px;
+  width: 300px;
+  background: #0a1120;
+  border-left: 1px solid #16203a;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-size: 0.82em;
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.panel-title {
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: #eaf2ff;
+}
+.link {
+  background: none;
+  border: none;
+  color: #6fb1ff;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+.muted {
+  color: #8090a8;
+  line-height: 1.5;
+}
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0;
+  border-bottom: 1px solid #121b2e;
+}
+.row-k {
+  color: #8496b2;
+}
+.row-v {
+  color: #dbe4f0;
+  text-align: right;
+}
+.row-v.warn {
+  color: #ffb454;
+}
+.bar {
+  height: 6px;
+  background: #16203a;
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 2px 0 6px;
+}
+.bar-fill {
+  height: 100%;
+  background: #5ce0a0;
+}
+.fleet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+.fleet-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #101a2c;
+  border: 1px solid #1c2740;
+  border-radius: 5px;
+  padding: 5px 8px;
+  cursor: pointer;
+  font: inherit;
+  color: #cdd8ea;
+  text-align: left;
+}
+.fleet-row:hover {
+  background: #16233c;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: #5acdff;
+}
+.dot.docked {
+  background: #96a0b4;
+}
+.dot.crashed {
+  background: #ff5050;
+}
+.fl-id {
+  flex: 1;
+}
+.fl-mode {
+  color: #8496b2;
+  font-size: 0.9em;
+}
+.fl-fuel {
+  color: #9fb0c8;
+  min-width: 36px;
+  text-align: right;
+}
+.panel-stats {
+  margin-top: 4px;
 }

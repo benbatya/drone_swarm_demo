@@ -38,7 +38,10 @@ export function baseLayers(): Layer[] {
 }
 
 // Active fires (ground truth: orange dots).
-export function fireLayer(fires: FireView[]): Layer[] {
+export function fireLayer(
+  fires: FireView[],
+  onSelect?: (cellId: number) => void,
+): Layer[] {
   return [
     new ScatterplotLayer<FireView>({
       id: 'fires',
@@ -49,6 +52,16 @@ export function fireLayer(fires: FireView[]): Layer[] {
       radiusMinPixels: 2.5,
       getFillColor: [255, 120, 40, 225],
       stroked: false,
+      pickable: !!onSelect,
+      onClick: onSelect
+        ? (info) => {
+            if (info.object) {
+              onSelect(info.object.cellId)
+              return true
+            }
+            return false
+          }
+        : undefined,
     }),
   ]
 }
@@ -74,6 +87,7 @@ const DRONE_FILL: Record<DroneView['status'], [number, number, number]> = {
 export interface DroneLayerOpts {
   showDetection: boolean
   detectionRadiusM: number
+  onSelect?: (id: string) => void
 }
 
 // Drones: detection circles (God Mode), heading ticks, and status-colored dots.
@@ -112,15 +126,24 @@ export function droneLayers(drones: DroneView[], opts: DroneLayerOpts): Layer[] 
       id: 'drones',
       data: drones,
       getPosition: (d) => d.position,
-      getRadius: 5,
+      getRadius: 6,
       radiusUnits: 'pixels',
-      radiusMinPixels: 4,
+      radiusMinPixels: 5,
       getFillColor: (d) => DRONE_FILL[d.status],
       stroked: true,
       lineWidthUnits: 'pixels',
       getLineWidth: 1.5,
       getLineColor: [10, 16, 28],
       pickable: true,
+      onClick: opts.onSelect
+        ? (info) => {
+            if (info.object) {
+              opts.onSelect!(info.object.id)
+              return true
+            }
+            return false
+          }
+        : undefined,
     }),
   )
 
