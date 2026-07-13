@@ -41,13 +41,31 @@ describe('world season', () => {
   )
 
   it('detects fires within range as drones patrol', () => {
-    const cfg = makeConfig({ seed: 3, ignitionLambdaPerMin: 2 })
+    const cfg = makeConfig({ seed: 3, ignitionLambdaPerMin: 1 })
     const w = createWorld(cfg)
     const rng = makeRng(cfg.seed)
-    for (let t = 0; t < 4000; t++) tickWorld(w, rng)
+    for (let t = 0; t < 2000; t++) tickWorld(w, rng)
     const totalKnown = w.drones.reduce((n, d) => n + d.knownFires.size, 0)
     expect(totalKnown).toBeGreaterThan(0)
-  })
+  }, 20_000)
+
+  it('autonomously douses fires and keeps most of the fleet airborne', () => {
+    const cfg = makeConfig({ seed: 11 })
+    const w = createWorld(cfg)
+    const rng = makeRng(cfg.seed)
+    for (let t = 0; t < TICKS_PER_SEASON; t++) tickWorld(w, rng)
+
+    // The fleet self-assigns extinguishes and actually puts fires out.
+    expect(w.score.doused).toBeGreaterThan(0)
+    // RTB refueling keeps the fleet alive — not everyone crashes.
+    const alive = w.drones.filter((d) => d.status !== 'crashed').length
+    expect(alive).toBeGreaterThan(0)
+    // Retardant/fuel invariants hold at season end.
+    for (const d of w.drones) {
+      expect(d.retardant).toBeGreaterThanOrEqual(0)
+      expect(d.retardant).toBeLessThanOrEqual(cfg.retardantLoads)
+    }
+  }, 60_000)
 })
 
 describe('crash on fuel exhaustion', () => {

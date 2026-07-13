@@ -1,10 +1,20 @@
 import { create } from 'zustand'
+import type { CellId } from '../sim/geo'
 
 export type Tab = 'console' | 'truth'
+
+export type Selection =
+  | { kind: 'drone'; id: string }
+  | { kind: 'fire'; cellId: CellId }
+  | null
 
 interface UIState {
   activeTab: Tab
   setTab: (t: Tab) => void
+  selection: Selection
+  selectDrone: (id: string) => void
+  selectFire: (cellId: CellId) => void
+  clearSelection: () => void
 }
 
 // Local, console-side UI state. The two tabs share one view component and
@@ -12,4 +22,8 @@ interface UIState {
 export const useUIStore = create<UIState>((set) => ({
   activeTab: 'truth',
   setTab: (t) => set({ activeTab: t }),
+  selection: null,
+  selectDrone: (id) => set({ selection: { kind: 'drone', id } }),
+  selectFire: (cellId) => set({ selection: { kind: 'fire', cellId } }),
+  clearSelection: () => set({ selection: null }),
 }))

@@ -1,12 +1,15 @@
 import { BASES, WORLD_H_M, WORLD_W_M, type SimConfig } from '../config'
 import { lngLatToMeters, type CellId, type Vec2 } from '../geo'
+import { makeScanExec } from '../directives/scanExec'
+import type {
+  Directive,
+  DirectiveExec,
+  RectM,
+  RtbExec,
+  ScanExec,
+} from '../directives/types'
 
 export type DroneStatus = 'airborne' | 'docked' | 'crashed'
-
-export interface Patrol {
-  waypoints: Vec2[]
-  idx: number
-}
 
 export interface DroneTruth {
   id: string
@@ -19,9 +22,30 @@ export interface DroneTruth {
   retardant: number
   status: DroneStatus
   crashedAt?: number
+  /** Turnaround countdown while docked (sim-minutes). */
+  dockRemainingMin: number
+
   /** Fires this drone has personally detected (precursor to DroneBelief, M3). */
   knownFires: Set<CellId>
-  patrol: Patrol
+
+  // Directive execution
+  queue: Directive[]
+  exec: DirectiveExec | null
+  execDirId: string | null
+  /** Saved scan progress (elapsedMin) by directive id, for resume-after-preempt. */
+  scanProgress: Map<string, number>
+
+  /** Forced RTB (fuel/retardant) — above the queue, not a directive. */
+  override: RtbExec | null
+  forcedRtb: boolean
+
+  /** Standing home-sector patrol; idle fallback when no known in-range fire. */
+  autoPatrol: ScanExec
+  /** Self-assigned idle extinguish, re-evaluated each tick. */
+  autoExec: DirectiveExec | null
+
+  /** Directive ids aborted since last sync (reported to console in M3). */
+  abortedIds: string[]
 }
 
 function clampToWorld(v: Vec2): Vec2 {
@@ -31,15 +55,12 @@ function clampToWorld(v: Vec2): Vec2 {
   }
 }
 
-/** Corners of a square patrol box centered on `home`, clamped to the world. */
-export function patrolBox(home: Vec2, sideM: number): Vec2[] {
-  const h = sideM / 2
-  return [
-    { x: home.x - h, y: home.y - h },
-    { x: home.x + h, y: home.y - h },
-    { x: home.x + h, y: home.y + h },
-    { x: home.x - h, y: home.y + h },
-  ].map(clampToWorld)
+/** A square home-sector rectangle centered on `home`, clamped to the world. */
+export function homeSectorRect(home: Vec2, sideKm: number): RectM {
+  const h = (sideKm * 1000) / 2
+  const min = clampToWorld({ x: home.x - h, y: home.y - h })
+  const max = clampToWorld({ x: home.x + h, y: home.y + h })
+  return { minX: min.x, minY: min.y, maxX: max.x, maxY: max.y }
 }
 
 /** Build the initial fleet: `dronesPerBase` drones at each base, full tanks. */
@@ -47,7 +68,7 @@ export function createFleet(cfg: SimConfig): DroneTruth[] {
   const drones: DroneTruth[] = []
   for (const base of BASES) {
     const home = lngLatToMeters(base.lng, base.lat)
-    const waypoints = patrolBox(home, cfg.patrolBoxKm * 1000)
+    const rect = homeSectorRect(home, cfg.patrolBoxKm)
     for (let i = 0; i < cfg.dronesPerBase; i++) {
       drones.push({
         id: `${base.id}-${i + 1}`,
@@ -58,9 +79,17 @@ export function createFleet(cfg: SimConfig): DroneTruth[] {
         fuelL: cfg.fuelCapacityL,
         retardant: cfg.retardantLoads,
         status: 'airborne',
+        dockRemainingMin: 0,
         knownFires: new Set<CellId>(),
-        // Stagger start corner so co-based drones cover different ground.
-        patrol: { waypoints, idx: i % waypoints.length },
+        queue: [],
+        exec: null,
+        execDirId: null,
+        scanProgress: new Map<string, number>(),
+        override: null,
+        forcedRtb: false,
+        autoPatrol: makeScanExec(rect, Infinity, home),
+        autoExec: null,
+        abortedIds: [],
       })
     }
   }

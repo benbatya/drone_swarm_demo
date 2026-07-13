@@ -76,8 +76,12 @@ export interface SimConfig {
   operationalRangeKm: number
   /** Derived: liters burned per sim-minute aloft. */
   fuelBurnLPerMin: number
-  /** Forced-RTB fuel floor (liters). */
+  /** Forced-RTB fuel floor (liters) — a hard minimum reserve. */
   lowFuelFloorL: number
+  /** Distance-aware RTB: trigger when remaining range ≤ dist-to-base × this. */
+  rtbSafetyFactor: number
+  /** Extra safety margin (km) added to the distance-aware RTB trigger. */
+  rtbMarginKm: number
   retardantLoads: number
   turnaroundMin: number
   /** Mean new fires per sim-minute (Poisson λ). */
@@ -99,6 +103,8 @@ const BASE_CONFIG: Omit<SimConfig, 'fuelBurnLPerMin'> = {
   fuelCapacityL: 1000,
   operationalRangeKm: 600,
   lowFuelFloorL: 120,
+  rtbSafetyFactor: 1.25,
+  rtbMarginKm: 25,
   retardantLoads: 10,
   turnaroundMin: 60,
   ignitionLambdaPerMin: 1 / 60,

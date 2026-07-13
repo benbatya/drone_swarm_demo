@@ -6,7 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { WORLD_CENTER } from '../../sim/config'
 import type { TruthSnapshot } from '../../sim/snapshot'
 import { useRunner } from '../RunnerContext'
-import type { Tab } from '../store'
+import { useUIStore, type Tab } from '../store'
 import { buildGraticule, type GridLine } from './graticule'
 import { baseLayers, droneLayers, fireLayer } from './layers'
 
@@ -22,6 +22,8 @@ const FLAT_STYLE: StyleSpecification = {
 
 export function MapCanvas({ source }: { source: Tab }) {
   const runner = useRunner()
+  const selectDrone = useUIStore((s) => s.selectDrone)
+  const selectFire = useUIStore((s) => s.selectFire)
   const containerRef = useRef<HTMLDivElement>(null)
   const snapRef = useRef<TruthSnapshot>(runner.getStoreSnapshot())
   const sourceRef = useRef<Tab>(source)
@@ -64,10 +66,11 @@ export function MapCanvas({ source }: { source: Tab }) {
             widthUnits: 'pixels',
           }),
           ...baseLayers(),
-          ...fireLayer(snap.fires),
+          ...fireLayer(snap.fires, selectFire),
           ...droneLayers(snap.drones, {
             showDetection: sourceRef.current === 'truth',
             detectionRadiusM: runner.cfg.detectionRadiusM,
+            onSelect: selectDrone,
           }),
         ],
       })
