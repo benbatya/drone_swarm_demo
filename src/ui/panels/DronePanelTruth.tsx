@@ -1,4 +1,5 @@
 import type { DroneView } from '../../sim/snapshot'
+import { BlackoutStrip } from './BlackoutStrip'
 import { Bar, Row } from './bits'
 
 export function DronePanelTruth({
@@ -42,6 +43,7 @@ export function DronePanelTruth({
         <Row k="Turnaround" v={`${drone.dockRemainingMin} min left`} />
       )}
       {drone.crashedAt != null && <Row k="Crashed" v={`t = ${drone.crashedAt}`} warn />}
+      <BlackoutStrip droneId={drone.id} />
     </div>
   )
 }

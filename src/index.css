@@ -355,3 +355,144 @@ body {
   opacity: 0.45;
   cursor: default;
 }
+
+/* God-Mode config */
+.god-panel {
+  display: flex;
+  flex-direction: column;
+}
+.config-toggle {
+  background: none;
+  border: none;
+  color: #9fb0c8;
+  cursor: pointer;
+  font: inherit;
+  padding: 2px 0;
+  text-align: left;
+}
+.config-body {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 6px 0 2px;
+}
+.config-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.config-actions .issue-btn {
+  flex: 1;
+}
+
+/* Blackout timeline strip */
+.blackout {
+  margin-top: 10px;
+}
+.blackout-label {
+  color: #8496b2;
+  margin-bottom: 4px;
+}
+.strip {
+  position: relative;
+  height: 14px;
+  background: #244a3a; /* connected */
+  border: 1px solid #1c2740;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.strip-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+.strip-seg.routine {
+  background: #b9822f;
+}
+.strip-seg.deep {
+  background: #b23838;
+}
+.strip-now {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: #eaf2ff;
+}
+.strip-legend {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 0.82em;
+  color: #8496b2;
+}
+.lg::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.lg.connected::before {
+  background: #2f7a5a;
+}
+.lg.routine::before {
+  background: #b9822f;
+}
+.lg.deep::before {
+  background: #b23838;
+}
+
+/* End-of-season summary */
+.summary-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 8, 15, 0.72);
+}
+.summary-card {
+  background: #0e1728;
+  border: 1px solid #26374f;
+  border-radius: 12px;
+  padding: 24px 28px;
+  min-width: 320px;
+  text-align: center;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+}
+.summary-title {
+  font-size: 1.05em;
+  color: #eaf2ff;
+  margin-bottom: 14px;
+}
+.summary-score {
+  font-size: 2em;
+  font-weight: 700;
+  color: #ffb454;
+}
+.summary-unit {
+  font-size: 0.45em;
+  font-weight: 400;
+  color: #8496b2;
+}
+.summary-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 16px 0 20px;
+}
+.summary-rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+.sr-k {
+  color: #8496b2;
+}
+.sr-v {
+  color: #dbe4f0;
+}

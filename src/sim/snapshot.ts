@@ -1,4 +1,5 @@
 import { dayOf, hourMinOf } from './clock'
+import { TICKS_PER_SEASON } from './config'
 import { cellCenter, metersToLngLat } from './geo'
 import type { CellId } from './geo'
 import { activeKnownCount } from './belief/droneBelief'
@@ -78,6 +79,8 @@ export interface TruthSnapshot {
   hourMin: string
   running: boolean
   speed: number
+  seasonComplete: boolean
+  seasonLengthTicks: number
   score: {
     fireMinutes: number
     totalFires: number
@@ -93,6 +96,7 @@ export interface SnapshotMeta {
   running: boolean
   speed: number
   version: number
+  seasonComplete: boolean
 }
 
 function modeOf(d: DroneTruth): DroneMode {
@@ -235,6 +239,8 @@ export function buildSnapshot(w: GroundTruth, meta: SnapshotMeta): TruthSnapshot
     hourMin: hourMinOf(w.tick),
     running: meta.running,
     speed: meta.speed,
+    seasonComplete: meta.seasonComplete,
+    seasonLengthTicks: TICKS_PER_SEASON,
     score: {
       fireMinutes: w.score.fireMinutes,
       totalFires: w.score.totalFires,

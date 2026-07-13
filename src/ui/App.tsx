@@ -1,5 +1,6 @@
 import { ControlBar } from './ControlBar'
 import { SimulationView } from './SimulationView'
+import { SeasonSummary } from './panels/SeasonSummary'
 import { useUIStore, type Tab } from './store'
 
 const TABS: { id: Tab; label: string }[] = [
@@ -34,6 +35,7 @@ export function App() {
       <ControlBar />
       <main className="stage">
         <SimulationView source={activeTab} />
+        <SeasonSummary />
       </main>
     </div>
   )
