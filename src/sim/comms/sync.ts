@@ -58,9 +58,13 @@ export function stepSync(w: GroundTruth): void {
   for (const d of w.drones) {
     if (d.status === 'crashed') continue // permanently no comms
     const c = d.comms
-    if (now < c.nextSyncAt) continue
+    // A docked drone is hard-lined at base: always reachable, and it refreshes
+    // the console every tick (bypassing the cadence) so it can never drift
+    // stale/missing while it's sitting at a base — at base ⇒ never blacked out.
+    const docked = d.status === 'docked'
+    if (!docked && now < c.nextSyncAt) continue
 
-    const connected = d.status === 'docked' ? true : !isDarkAt(c, now)
+    const connected = docked || !isDarkAt(c, now)
     if (!connected) {
       c.retryIntervalMin =
         c.retryIntervalMin === 0

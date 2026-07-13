@@ -1,5 +1,6 @@
 import {
-  BASE_TICKS_PER_SEC,
+  REAL_SEC_PER_TICK,
+  DEFAULT_SPEED,
   makeConfig,
   MAX_TICKS_PER_FRAME,
   TICKS_PER_SEASON,
@@ -46,7 +47,7 @@ export class SimRunner {
   private storeSnapshot: TruthSnapshot
 
   private running = false
-  private speed = 1
+  private speed = DEFAULT_SPEED
   private rafId = 0
   private lastTs = 0
   private acc = 0
@@ -183,13 +184,15 @@ export class SimRunner {
   /** Read a drone's blackout schedule for the God-Mode timeline strip. */
   getBlackout(
     id: string,
-  ): { windows: DarkWindow[]; now: number; lastSyncAt: number } | null {
+  ): { windows: DarkWindow[]; now: number; lastSyncAt: number; docked: boolean } | null {
     const d = this.world.drones.find((x) => x.id === id)
     if (!d) return null
     return {
       windows: d.comms.darkWindows,
       now: this.world.tick,
       lastSyncAt: d.comms.lastSyncAt,
+      // Docked drones are hard-lined at base — never blacked out.
+      docked: d.status === 'docked',
     }
   }
 
@@ -231,7 +234,7 @@ export class SimRunner {
     const dt = Math.min((ts - this.lastTs) / 1000, 0.1) // clamp long gaps
     this.lastTs = ts
 
-    this.acc += dt * BASE_TICKS_PER_SEC * this.speed
+    this.acc += (dt * this.speed) / REAL_SEC_PER_TICK
     let owed = Math.floor(this.acc)
     if (owed > MAX_TICKS_PER_FRAME) owed = MAX_TICKS_PER_FRAME
     this.acc -= owed
