@@ -79,8 +79,8 @@ function headingEndpoint(
 }
 
 const DRONE_FILL: Record<DroneView['status'], [number, number, number]> = {
-  airborne: [90, 205, 255],
-  docked: [150, 160, 180],
+  airborne: [80, 220, 130], // current/live = green (ground truth is always current)
+  docked: [130, 150, 180],
   crashed: [255, 80, 80],
 }
 
@@ -144,6 +144,17 @@ export function droneLayers(drones: DroneView[], opts: DroneLayerOpts): Layer[] 
             return false
           }
         : undefined,
+    }),
+    new TextLayer<DroneView>({
+      id: 'drone-labels',
+      data: drones,
+      getPosition: (d) => d.position,
+      getText: (d) => d.id,
+      getSize: 10,
+      sizeUnits: 'pixels',
+      getColor: [214, 232, 220, 235],
+      getPixelOffset: [0, -13],
+      fontFamily: 'monospace',
     }),
   )
 

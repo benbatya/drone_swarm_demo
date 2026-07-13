@@ -49,12 +49,14 @@ export interface ConsoleDroneView {
   id: string
   homeBaseId: string
   staleness: Staleness
+  /** 0 = fresh … 1 = missing; drives the green→blue color fade. */
+  stalenessFrac: number
   lastContactAt: number | null
   contactAgeMin: number | null
   /** Last confirmed (reported) position, or null if never contacted. */
   reportedPosition: [number, number] | null
   heading: number | null
-  /** Dead-reckoned ghost; equals reported for fresh/missing, extrapolated when stale. */
+  /** Dead-reckoned current-position estimate (extrapolated along last heading). */
   ghostPosition: [number, number] | null
   uncertaintyRadiusM: number
   status: DroneStatus | null
@@ -137,6 +139,7 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
         id: rec.id,
         homeBaseId,
         staleness: 'unknown',
+        stalenessFrac: 1,
         lastContactAt: null,
         contactAgeMin: null,
         reportedPosition: null,
@@ -162,19 +165,22 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
         : age > cfg.staleThresholdMin
           ? 'stale'
           : 'fresh'
+    const stalenessFrac = Math.min(age / cfg.missingThresholdMin, 1)
 
     const rep = rec.reported
     const reportedLL = metersToLngLat(rep.pos.x, rep.pos.y)
 
-    // Dead reckoning: extrapolate along last heading while stale; freeze on missing.
+    // Dead reckoning: the console never has a live fix, so its best estimate of
+    // where the drone *is now* is its last position projected along the last
+    // heading for the whole contact gap. Uncertainty grows with that gap.
     let ghostX = rep.pos.x
     let ghostY = rep.pos.y
     let uncertaintyRadiusM = 0
-    if (staleness === 'stale' && rep.status === 'airborne') {
+    if (rep.status === 'airborne') {
       const dist = cfg.speedMPerMin * age
       ghostX = rep.pos.x + Math.sin(rep.heading) * dist
       ghostY = rep.pos.y + Math.cos(rep.heading) * dist
-      uncertaintyRadiusM = cfg.speedMPerMin * age * 0.25
+      uncertaintyRadiusM = cfg.speedMPerMin * age * 0.3
     }
     const ghostLL = metersToLngLat(ghostX, ghostY)
 
@@ -182,6 +188,7 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
       id: rec.id,
       homeBaseId,
       staleness,
+      stalenessFrac,
       lastContactAt: rec.lastContactAt,
       contactAgeMin: age,
       reportedPosition: [reportedLL.lng, reportedLL.lat],

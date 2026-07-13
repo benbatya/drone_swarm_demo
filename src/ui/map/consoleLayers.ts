@@ -1,15 +1,9 @@
 import type { Layer } from '@deck.gl/core'
-import { LineLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
+import { LineLayer, PolygonLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
+import { lngLatToMeters, metersToLngLat } from '../../sim/geo'
 import type { ConsoleDroneView, ConsoleView, FireView } from '../../sim/snapshot'
-import type { Staleness } from '../../sim/snapshot'
 import type { DraftRect } from '../store'
-
-const STALE_COLOR: Record<Staleness, [number, number, number]> = {
-  fresh: [90, 205, 255],
-  stale: [255, 180, 84],
-  missing: [255, 80, 80],
-  unknown: [130, 140, 160],
-}
+import { stalenessColor } from './colors'
 
 export interface ConsoleLayerOpts {
   onSelectDrone?: (id: string) => void
@@ -17,10 +11,27 @@ export interface ConsoleLayerOpts {
   draftRect?: DraftRect | null
 }
 
+/** Endpoint `dist` meters from `pos` along compass bearing `heading`. */
+function headingEndpoint(
+  pos: [number, number],
+  heading: number,
+  dist: number,
+): [number, number] {
+  const m = lngLatToMeters(pos[0], pos[1])
+  const e = { x: m.x + Math.sin(heading) * dist, y: m.y + Math.cos(heading) * dist }
+  const ll = metersToLngLat(e.x, e.y)
+  return [ll.lng, ll.lat]
+}
+
+const col = (d: ConsoleDroneView, alpha: number): [number, number, number, number] => {
+  const [r, g, b] = stalenessColor(d.stalenessFrac)
+  return [r, g, b, alpha]
+}
+
 export function consoleLayers(cv: ConsoleView, opts: ConsoleLayerOpts): Layer[] {
   const layers: Layer[] = []
-  const withPos = cv.drones.filter((d) => d.reportedPosition)
-  const stale = withPos.filter((d) => d.staleness === 'stale' && d.ghostPosition)
+  const withPos = cv.drones.filter((d) => d.reportedPosition && d.ghostPosition)
+  const withGhost = withPos.filter((d) => d.uncertaintyRadiusM > 0)
 
   // Believed fires (console knowledge only).
   layers.push(
@@ -39,62 +50,82 @@ export function consoleLayers(cv: ConsoleView, opts: ConsoleLayerOpts): Layer[] 
     }),
   )
 
-  // Uncertainty circles + dead-reckoning path for stale drones.
   layers.push(
+    // Position-uncertainty circle at the dead-reckoned estimate — grows with staleness.
     new ScatterplotLayer<ConsoleDroneView>({
       id: 'console-uncertainty',
-      data: stale,
+      data: withGhost,
       getPosition: (d) => d.ghostPosition!,
       getRadius: (d) => d.uncertaintyRadiusM,
       radiusUnits: 'meters',
-      filled: false,
+      filled: true,
+      getFillColor: (d) => col(d, 22),
       stroked: true,
-      getLineColor: [255, 180, 84, 70],
+      getLineColor: (d) => col(d, 90),
       lineWidthUnits: 'pixels',
       getLineWidth: 1,
     }),
+    // Dead-reckoning path: last-confirmed → estimated-now.
     new LineLayer<ConsoleDroneView>({
       id: 'console-deadreckon',
-      data: stale,
+      data: withGhost,
       getSourcePosition: (d) => d.reportedPosition!,
       getTargetPosition: (d) => d.ghostPosition!,
-      getColor: [255, 180, 84, 150],
+      getColor: (d) => col(d, 150),
       getWidth: 1,
       widthUnits: 'pixels',
     }),
-    // Ghost marker (hollow) at the dead-reckoned position.
+    // Extrapolated heading tick at the estimated position.
+    new LineLayer<ConsoleDroneView>({
+      id: 'console-heading',
+      data: withPos,
+      getSourcePosition: (d) => d.ghostPosition!,
+      getTargetPosition: (d) => headingEndpoint(d.ghostPosition!, d.heading ?? 0, 9000),
+      getColor: (d) => col(d, 200),
+      getWidth: 1.5,
+      widthUnits: 'pixels',
+    }),
+    // Last-confirmed marker (dim hollow ring).
     new ScatterplotLayer<ConsoleDroneView>({
-      id: 'console-ghost',
-      data: stale,
-      getPosition: (d) => d.ghostPosition!,
-      getRadius: 5,
+      id: 'console-reported',
+      data: withGhost,
+      getPosition: (d) => d.reportedPosition!,
+      getRadius: 4,
       radiusUnits: 'pixels',
       filled: false,
       stroked: true,
-      getLineColor: [255, 180, 84, 220],
+      getLineColor: (d) => col(d, 120),
       lineWidthUnits: 'pixels',
-      getLineWidth: 1.5,
+      getLineWidth: 1,
     }),
-  )
-
-  // Last-confirmed markers, colored by staleness (red = MISSING).
-  layers.push(
+    // Estimated current position (filled, colored by staleness) — selectable.
     new ScatterplotLayer<ConsoleDroneView>({
       id: 'console-drones',
       data: withPos,
-      getPosition: (d) => d.reportedPosition!,
+      getPosition: (d) => d.ghostPosition!,
       getRadius: 6,
       radiusUnits: 'pixels',
       radiusMinPixels: 5,
-      getFillColor: (d) => STALE_COLOR[d.staleness],
+      getFillColor: (d) => col(d, 255),
       stroked: true,
       lineWidthUnits: 'pixels',
-      getLineWidth: (d) => (d.staleness === 'missing' ? 2 : 1.5),
-      getLineColor: (d) => (d.staleness === 'missing' ? [255, 200, 200] : [10, 16, 28]),
+      getLineWidth: 1.5,
+      getLineColor: [10, 16, 28],
       pickable: true,
       onClick: opts.onSelectDrone
         ? (info) => (info.object ? (opts.onSelectDrone!(info.object.id), true) : false)
         : undefined,
+    }),
+    new TextLayer<ConsoleDroneView>({
+      id: 'console-labels',
+      data: withPos,
+      getPosition: (d) => d.ghostPosition!,
+      getText: (d) => d.id,
+      getSize: 10,
+      sizeUnits: 'pixels',
+      getColor: (d) => col(d, 235),
+      getPixelOffset: [0, -13],
+      fontFamily: 'monospace',
     }),
   )
 
