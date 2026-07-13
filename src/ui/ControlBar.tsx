@@ -1,25 +1,42 @@
-// Shared control bar (both tabs). M0 renders the layout with placeholders;
-// M1 wires play/pause, speed, clock and score to the SimRunner.
+import { useRunner } from './RunnerContext'
+import { useSimSnapshot } from './useSimSnapshot'
+
 const SPEEDS = [1, 4, 16, 60]
 
 export function ControlBar() {
+  const runner = useRunner()
+  const snap = useSimSnapshot()
+
   return (
     <div className="controlbar">
-      <button type="button" className="ctrl" disabled title="Play/pause (M1)">
-        ⏸
+      <button
+        type="button"
+        className="ctrl"
+        onClick={() => runner.toggle()}
+        title="Play / pause"
+        data-testid="play-pause"
+      >
+        {snap.running ? '⏸' : '▶'}
       </button>
       <div className="speeds">
         {SPEEDS.map((s) => (
-          <button key={s} type="button" className="ctrl" disabled>
+          <button
+            key={s}
+            type="button"
+            className={'ctrl' + (snap.speed === s ? ' active' : '')}
+            onClick={() => runner.setSpeed(s)}
+            data-testid={`speed-${s}`}
+          >
             ×{s}
           </button>
         ))}
       </div>
       <div className="clock" data-testid="clock">
-        Day 0 · 00:00
+        Day {snap.day} · {snap.hourMin}
       </div>
-      <div className="score" data-testid="score">
-        — fire-min
+      <div className="score" data-testid="score" title="Total fire-minutes burned (ground truth)">
+        {Math.round(snap.score.fireMinutes).toLocaleString()} fire-min ·{' '}
+        {snap.score.activeFires} active
       </div>
     </div>
   )
