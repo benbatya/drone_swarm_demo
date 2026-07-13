@@ -3,6 +3,8 @@ import {
   MAX_TICKS_PER_FRAME,
   type SimConfig,
 } from './config'
+import { addPending } from './belief/consoleBelief'
+import type { Directive } from './directives/types'
 import { makeRng, type Rng } from './rng'
 import { buildSnapshot, type TruthSnapshot } from './snapshot'
 import { createWorld, tickWorld, type GroundTruth } from './world'
@@ -143,6 +145,19 @@ export class SimRunner {
 
   setSpeed(n: number): void {
     this.speed = n
+    this.frameSnapshot = this.build()
+    this.emitStore()
+    this.publishHook()
+  }
+
+  /**
+   * Operator input: queue a pending directive for a drone (the console pushes;
+   * the drone downloads it at its next successful sync). issuedAt is stamped to
+   * the current tick.
+   */
+  issueDirective(droneId: string, directive: Directive): void {
+    const now = this.world.tick
+    addPending(this.world.console, droneId, { ...directive, issuedAt: now }, now)
     this.frameSnapshot = this.build()
     this.emitStore()
     this.publishHook()

@@ -45,7 +45,7 @@ describe('world season', () => {
     const w = createWorld(cfg)
     const rng = makeRng(cfg.seed)
     for (let t = 0; t < 2000; t++) tickWorld(w, rng)
-    const totalKnown = w.drones.reduce((n, d) => n + d.knownFires.size, 0)
+    const totalKnown = w.drones.reduce((n, d) => n + d.belief.fires.size, 0)
     expect(totalKnown).toBeGreaterThan(0)
   }, 20_000)
 
@@ -88,6 +88,6 @@ describe('crash on fuel exhaustion', () => {
     for (let i = 0; i < 10; i++) tickWorld(w, rng)
     expect(d.pos).toEqual(frozen)
     expect(d.status).toBe('crashed')
-    expect(d.knownFires.size).toBe(0) // no detection after crash
+    expect(d.belief.fires.size).toBe(0) // no detection after crash
   })
 })

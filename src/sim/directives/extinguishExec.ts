@@ -7,6 +7,15 @@ import type { ExecStatus, ExtinguishExec } from './types'
 /** A retardant drop lands when the drone is within this distance of the cell. */
 export const DROP_RADIUS_M = 50
 
+/** Mark a cell believed-out in the drone's belief (if it knows of it). */
+function markBeliefOut(d: DroneTruth, cellId: number, now: number): void {
+  const kf = d.belief.fires.get(cellId)
+  if (kf && !kf.believedOut) {
+    kf.believedOut = true
+    kf.updatedAt = now
+  }
+}
+
 export function stepExtinguish(
   exec: ExtinguishExec,
   d: DroneTruth,
@@ -16,7 +25,7 @@ export function stepExtinguish(
   const fire = w.fires.get(exec.cellId)
   if (!fire) {
     // Already out (doused by a peer, or gone). Complete without dropping.
-    d.knownFires.delete(exec.cellId)
+    markBeliefOut(d, exec.cellId, now)
     return 'done'
   }
   const target = cellCenter(exec.cellId)
@@ -29,7 +38,7 @@ export function stepExtinguish(
     w.fires.delete(exec.cellId)
     w.score.doused++
     d.retardant = Math.max(0, d.retardant - 1)
-    d.knownFires.delete(exec.cellId)
+    markBeliefOut(d, exec.cellId, now)
     return 'done'
   }
   return 'running'

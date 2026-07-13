@@ -7,11 +7,11 @@ import { WORLD_CENTER } from '../../sim/config'
 import type { TruthSnapshot } from '../../sim/snapshot'
 import { useRunner } from '../RunnerContext'
 import { useUIStore, type Tab } from '../store'
+import { consoleLayers } from './consoleLayers'
 import { buildGraticule, type GridLine } from './graticule'
 import { baseLayers, droneLayers, fireLayer } from './layers'
 
 // Flat inline style so the app boots fully offline (no tile/glyph fetches).
-// deck.gl generates its own text atlas, so no MapLibre glyphs are needed.
 const FLAT_STYLE: StyleSpecification = {
   version: 8,
   sources: {},
@@ -20,21 +20,27 @@ const FLAT_STYLE: StyleSpecification = {
   ],
 }
 
+function graticuleLayer(map: maplibregl.Map): GridLine[] {
+  const b = map.getBounds()
+  return buildGraticule(
+    { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() },
+    map.getZoom(),
+  )
+}
+
 export function MapCanvas({ source }: { source: Tab }) {
   const runner = useRunner()
-  const selectDrone = useUIStore((s) => s.selectDrone)
-  const selectFire = useUIStore((s) => s.selectFire)
   const containerRef = useRef<HTMLDivElement>(null)
   const snapRef = useRef<TruthSnapshot>(runner.getStoreSnapshot())
   const sourceRef = useRef<Tab>(source)
   const rebuildRef = useRef<() => void>(() => {})
 
-  // Keep the latest source without re-running the map-setup effect.
   sourceRef.current = source
 
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
+    const store = useUIStore.getState
 
     const map = new maplibregl.Map({
       container,
@@ -48,42 +54,83 @@ export function MapCanvas({ source }: { source: Tab }) {
     map.addControl(overlay)
 
     const rebuild = () => {
-      const b = map.getBounds()
-      const grat = buildGraticule(
-        { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() },
-        map.getZoom(),
-      )
-      const snap = snapRef.current
-      overlay.setProps({
-        layers: [
-          new LineLayer<GridLine>({
-            id: 'graticule',
-            data: grat,
-            getSourcePosition: (d) => d.source,
-            getTargetPosition: (d) => d.target,
-            getColor: (d) => (d.major ? [92, 112, 148, 170] : [58, 72, 96, 110]),
-            getWidth: 1,
-            widthUnits: 'pixels',
-          }),
-          ...baseLayers(),
-          ...fireLayer(snap.fires, selectFire),
-          ...droneLayers(snap.drones, {
-            showDetection: sourceRef.current === 'truth',
-            detectionRadiusM: runner.cfg.detectionRadiusM,
-            onSelect: selectDrone,
-          }),
-        ],
+      const grat = new LineLayer<GridLine>({
+        id: 'graticule',
+        data: graticuleLayer(map),
+        getSourcePosition: (d) => d.source,
+        getTargetPosition: (d) => d.target,
+        getColor: (d) => (d.major ? [92, 112, 148, 170] : [58, 72, 96, 110]),
+        getWidth: 1,
+        widthUnits: 'pixels',
       })
+      const snap = snapRef.current
+      const s = store()
+      if (sourceRef.current === 'truth') {
+        overlay.setProps({
+          layers: [
+            grat,
+            ...baseLayers(),
+            ...fireLayer(snap.fires, s.selectFire),
+            ...droneLayers(snap.drones, {
+              showDetection: true,
+              detectionRadiusM: runner.cfg.detectionRadiusM,
+              onSelect: s.selectDrone,
+            }),
+          ],
+        })
+      } else {
+        overlay.setProps({
+          layers: [
+            grat,
+            ...baseLayers(),
+            ...consoleLayers(snap.console, {
+              onSelectDrone: s.selectDrone,
+              onSelectFire: s.selectFire,
+              draftRect: s.draftRect,
+            }),
+          ],
+        })
+      }
     }
     rebuildRef.current = rebuild
 
-    const onFrame = (s: TruthSnapshot) => {
-      snapRef.current = s
+    const onFrame = (snap: TruthSnapshot) => {
+      snapRef.current = snap
       rebuild()
     }
     const unsub = runner.onFrame(onFrame)
     map.on('load', rebuild)
     map.on('move', rebuild)
+
+    // Shift-drag to draw a scan rectangle (User Console only).
+    let drawing = false
+    let start: maplibregl.LngLat | null = null
+    const rectFrom = (a: maplibregl.LngLat, b: maplibregl.LngLat) => ({
+      west: Math.min(a.lng, b.lng),
+      east: Math.max(a.lng, b.lng),
+      south: Math.min(a.lat, b.lat),
+      north: Math.max(a.lat, b.lat),
+    })
+    map.on('mousedown', (e) => {
+      if (sourceRef.current !== 'console' || !e.originalEvent.shiftKey) return
+      drawing = true
+      start = e.lngLat
+      map.dragPan.disable()
+      store().setDraftRect(rectFrom(e.lngLat, e.lngLat))
+      rebuild()
+    })
+    map.on('mousemove', (e) => {
+      if (!drawing || !start) return
+      store().setDraftRect(rectFrom(start, e.lngLat))
+      rebuild()
+    })
+    const endDraw = () => {
+      if (!drawing) return
+      drawing = false
+      start = null
+      map.dragPan.enable()
+    }
+    map.on('mouseup', endDraw)
 
     return () => {
       unsub()
@@ -92,8 +139,7 @@ export function MapCanvas({ source }: { source: Tab }) {
     }
   }, [runner])
 
-  // Reflect a tab switch (detection circles are God-Mode only) without
-  // rebuilding the map.
+  // Reflect tab switches (different data source) without rebuilding the map.
   useEffect(() => {
     rebuildRef.current()
   }, [source])

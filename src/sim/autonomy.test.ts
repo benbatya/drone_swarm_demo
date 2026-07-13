@@ -3,11 +3,22 @@ import { makeConfig } from './config'
 import { cellIdOf } from './geo'
 import { makeRng } from './rng'
 import { createWorld, tickWorld, type GroundTruth } from './world'
-import { homeSectorRect } from './drones/drone'
+import { homeSectorRect, type DroneTruth } from './drones/drone'
 import { enqueue } from './directives/queue'
 
 const rng = () => makeRng(1)
 const world = (): GroundTruth => createWorld(makeConfig({ ignitionLambdaPerMin: 0 }))
+
+/** Seed a drone's belief with a self-detected active fire. */
+function know(d: DroneTruth, cellId: number): void {
+  d.belief.fires.set(cellId, {
+    cellId,
+    firstSeenAt: 1,
+    source: 'self',
+    believedOut: false,
+    updatedAt: 1,
+  })
+}
 
 describe('autonomous idle behavior', () => {
   it('self-engages a known in-range fire, then returns to patrol once out', () => {
@@ -16,7 +27,7 @@ describe('autonomous idle behavior', () => {
     const d = w.drones[0]
     const id = cellIdOf({ x: d.homePos.x + 5000, y: d.homePos.y })
     w.fires.set(id, { cellId: id, ignitedAt: 1 })
-    d.knownFires.add(id)
+    know(d, id)
 
     tickWorld(w, r)
     expect(d.autoExec?.kind).toBe('extinguish')
@@ -34,7 +45,7 @@ describe('autonomous idle behavior', () => {
     const d = w.drones[0]
     const id = cellIdOf({ x: d.homePos.x + 80_000, y: d.homePos.y }) // 80km, in range
     w.fires.set(id, { cellId: id, ignitedAt: 1 })
-    d.knownFires.add(id)
+    know(d, id)
 
     tickWorld(w, r)
     expect(d.autoExec?.kind).toBe('extinguish')
@@ -51,7 +62,7 @@ describe('autonomous idle behavior', () => {
     const far = { x: d.homePos.x + 200_000, y: d.homePos.y } // 200km > 168km
     const id = cellIdOf(far)
     w.fires.set(id, { cellId: id, ignitedAt: 1 })
-    d.knownFires.add(id)
+    know(d, id)
 
     tickWorld(w, r)
     expect(d.autoExec).toBe(null) // out of range -> patrol
@@ -63,7 +74,7 @@ describe('autonomous idle behavior', () => {
     const d = w.drones[0]
     const id = cellIdOf({ x: d.homePos.x + 5000, y: d.homePos.y })
     w.fires.set(id, { cellId: id, ignitedAt: 1 })
-    d.knownFires.add(id)
+    know(d, id)
 
     tickWorld(w, r)
     expect(d.autoExec?.kind).toBe('extinguish')
