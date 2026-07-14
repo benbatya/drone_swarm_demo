@@ -32,7 +32,7 @@ interface UIState {
 // Local, console-side UI state. The two tabs share one view component and
 // differ only by `source`: 'console' (believed state) vs 'truth' (God Mode).
 export const useUIStore = create<UIState>((set) => ({
-  activeTab: 'truth',
+  activeTab: 'console',
   setTab: (t) => set({ activeTab: t }),
   selection: null,
   selectDrone: (id) => set({ selection: { kind: 'drone', id } }),

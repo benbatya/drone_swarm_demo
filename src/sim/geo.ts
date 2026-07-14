@@ -9,6 +9,8 @@ import {
   COS_REF_LAT,
   GRID_COLS,
   M_PER_DEG,
+  WORLD_H_M,
+  WORLD_W_M,
 } from './config'
 
 export interface Vec2 {
@@ -42,6 +44,14 @@ export function metersToLngLat(x: number, y: number): LngLat {
 /** Euclidean distance in meters between two plane points. */
 export function distance(a: Vec2, b: Vec2): number {
   return Math.hypot(a.x - b.x, a.y - b.y)
+}
+
+/** Clamp a plane point into the world (map) bounds [0,WORLD_W_M]×[0,WORLD_H_M]. */
+export function clampToWorld(v: Vec2): Vec2 {
+  return {
+    x: Math.min(Math.max(v.x, 0), WORLD_W_M),
+    y: Math.min(Math.max(v.y, 0), WORLD_H_M),
+  }
 }
 
 export type CellId = number
