@@ -2,19 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { makeConfig } from './config'
 
 describe('SimConfig fuel model', () => {
-  it('derives a burn rate consistent with the operational range', () => {
+  it('uses a fixed burn rate; endurance follows from capacity', () => {
     const cfg = makeConfig()
-    expect(cfg.fuelBurnLPerMin).toBeCloseTo(5.6, 6)
-    // A full tank flown straight covers exactly operationalRangeKm.
+    expect(cfg.fuelBurnLPerMin).toBeCloseTo(2.8, 6)
+    // A full 2000 L tank flown straight covers ~1200 km.
     const minutesAloft = cfg.fuelCapacityL / cfg.fuelBurnLPerMin
     const rangeKm = (minutesAloft * cfg.speedMPerMin) / 1000
-    expect(rangeKm).toBeCloseTo(cfg.operationalRangeKm, 3)
+    expect(rangeKm).toBeCloseTo(1200, 0)
   })
 
-  it('keeps range/burn consistent when retuned', () => {
-    const cfg = makeConfig({ operationalRangeKm: 450, fuelCapacityL: 800 })
+  it('keeps the burn rate fixed when capacity is retuned', () => {
+    const cfg = makeConfig({ fuelCapacityL: 800 })
+    expect(cfg.fuelBurnLPerMin).toBeCloseTo(2.8, 6)
+    // Halving-ish the tank shortens endurance proportionally, burn unchanged.
     const minutesAloft = cfg.fuelCapacityL / cfg.fuelBurnLPerMin
-    const rangeKm = (minutesAloft * cfg.speedMPerMin) / 1000
-    expect(rangeKm).toBeCloseTo(450, 3)
+    expect(minutesAloft).toBeCloseTo(800 / 2.8, 3)
   })
 })

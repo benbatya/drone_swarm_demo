@@ -80,9 +80,7 @@ export interface SimConfig {
   /** Drone↔drone gossip range (meters). */
   gossipRangeM: number
   fuelCapacityL: number
-  /** Operational range (km) — primary knob; fuelBurnLPerMin is derived from it. */
-  operationalRangeKm: number
-  /** Derived: liters burned per sim-minute aloft. */
+  /** Liters burned per sim-minute aloft (fixed). Endurance = capacity / burn. */
   fuelBurnLPerMin: number
   /** Forced-RTB fuel floor (liters) — a hard minimum reserve. */
   lowFuelFloorL: number
@@ -123,14 +121,14 @@ export interface SimConfig {
   deepDarkMaxMin: number
 }
 
-const BASE_CONFIG: Omit<SimConfig, 'fuelBurnLPerMin'> = {
+const BASE_CONFIG: SimConfig = {
   seed: 1337,
   dronesPerBase: 2,
   speedMPerMin: 1680,
   detectionRadiusM: 10_000,
   gossipRangeM: 50_000,
   fuelCapacityL: 2000,
-  operationalRangeKm: 600,
+  fuelBurnLPerMin: 2.8, // fixed; a full 2000 L tank gives ~714 min / ~1200 km
   lowFuelFloorL: 120,
   rtbSafetyFactor: 1.25,
   rtbMarginKm: 25,
@@ -153,11 +151,7 @@ const BASE_CONFIG: Omit<SimConfig, 'fuelBurnLPerMin'> = {
   deepDarkMaxMin: 220,
 }
 
-/** Build a SimConfig, deriving fuelBurnLPerMin so range/capacity stay consistent. */
+/** Build a SimConfig from the defaults plus any overrides. */
 export function makeConfig(overrides: Partial<SimConfig> = {}): SimConfig {
-  const merged = { ...BASE_CONFIG, ...overrides }
-  const fuelBurnLPerMin =
-    (merged.fuelCapacityL * merged.speedMPerMin) /
-    (merged.operationalRangeKm * 1000)
-  return { ...merged, fuelBurnLPerMin }
+  return { ...BASE_CONFIG, ...overrides }
 }
