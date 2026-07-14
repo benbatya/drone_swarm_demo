@@ -12,6 +12,9 @@ const readSim = () => (window as unknown as { __SIM__?: SimHook }).__SIM__
 test('sim boots, runs >=1000 frames, and advances state with no console errors', async ({
   page,
 }) => {
+  // Software-GL (swiftshader) rendering of the full basemap + sim layers is slow;
+  // reaching 1000 frames can take ~35s, so give the test generous headroom.
+  test.setTimeout(90_000)
   const errors: string[] = []
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text())
@@ -49,6 +52,16 @@ test('sim boots, runs >=1000 frames, and advances state with no console errors',
   // At least one drone's position changed between samples.
   const moved = s2!.drone0[0] !== s1!.drone0[0] || s2!.drone0[1] !== s1!.drone0[1]
   expect(moved).toBe(true)
+
+  // Terrain (hillshade) toggle is present on both tabs and loads its raster
+  // same-origin without emitting console errors.
+  const toggle = page.getByTestId('hillshade-toggle')
+  await expect(toggle).toBeVisible()
+  await toggle.click() // turn hillshade on
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await page.waitForTimeout(500)
+  await page.getByRole('button', { name: 'User Console' }).click()
+  await expect(page.getByTestId('hillshade-toggle')).toHaveAttribute('aria-pressed', 'true') // shared across tabs
 
   expect(errors, `page/console errors:\n${errors.join('\n')}`).toEqual([])
 })

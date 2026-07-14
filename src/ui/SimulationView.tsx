@@ -1,3 +1,4 @@
+import { HillshadeToggle } from './map/HillshadeToggle'
 import { MapCanvas } from './map/MapCanvas'
 import { ConsolePanel } from './panels/ConsolePanel'
 import { GodPanel } from './panels/GodPanel'
@@ -19,6 +20,7 @@ export function SimulationView({ source }: { source: Tab }) {
             {title}
           </div>
           <MapCanvas source={source} />
+          <HillshadeToggle />
         </div>
         <aside className="side-panel">
           {source === 'truth' ? <GodPanel /> : <ConsolePanel />}

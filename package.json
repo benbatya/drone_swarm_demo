@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test --config e2e/playwright.config.ts"
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
+    "build:basemap": "node scripts/build-basemap.mjs",
+    "build:hillshade": "node scripts/build-hillshade.mjs"
   },
   "dependencies": {
     "@deck.gl/core": "^9.3.6",
@@ -29,6 +31,8 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "jsdom": "^29.1.1",
+    "mapshaper": "^0.7.45",
+    "sharp": "^0.35.3",
     "typescript": "^7.0.2",
     "vite": "^8.1.4",
     "vitest": "^4.1.10"
