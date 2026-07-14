@@ -253,6 +253,11 @@ body {
 .fleet-row:hover {
   background: #16233c;
 }
+.fleet-row.selected {
+  background: #1c3a63;
+  border-color: #3a5c8c;
+  color: #eaf2ff;
+}
 .dot {
   width: 8px;
   height: 8px;
