@@ -22,7 +22,7 @@ Render the basemap as the bottom layers of the existing deck.gl stack (below gra
   - Physical: `ne_10m_land` (coastline/ocean), `ne_10m_lakes` (Shasta, Tahoe, Clear Lake…), `ne_10m_rivers_lake_centerlines` (Sacramento River…).
   - Cultural: `ne_10m_admin_1_states_provinces_lines` (**state borders only** — CA/NV/OR, no counties), `ne_10m_urban_areas`, `ne_10m_populated_places` (kept **in full within the bbox** — label every population center).
   - NE source pulled at generation time from a public-domain mirror (nvkelso/natural-earth-vector or geojson.xyz); optionally `us-atlas` (npm) for state/county lines. Generation network use is **dev-time only**.
-- Committed outputs in `src/ui/map/geo/`: `land.json`, `lakes.json`, `rivers.json`, `states.json`, `urban.json`, `places.json`. Est. total **< ~400 KB**.
+- Committed outputs in `src/ui/map/geo/`: `lakes.json`, `rivers.json`, `states.json`, `urban.json`, `places.json`. The land polygon lives at `src/sim/land.json` (the sim owns it — fires may only ignite on land, see `src/sim/land.ts`; the basemap imports it from there). Est. total **< ~400 KB**.
 
 ### 2. Hillshade data generation (dev-time only → separate committed raster)
 

@@ -1,5 +1,6 @@
 import { BASES, CELL_SIZE_M, WORLD_H_M, WORLD_W_M, type SimConfig } from './config'
-import { cellIdOf, distance, lngLatToMeters, type CellId, type Vec2 } from './geo'
+import { cellCenter, cellIdOf, distance, lngLatToMeters, type CellId, type Vec2 } from './geo'
+import { isOnLand } from './land'
 import type { Rng } from './rng'
 
 export interface FireTruth {
@@ -12,8 +13,9 @@ export interface FireTruth {
 const BASE_METERS: Vec2[] = BASES.map((b) => lngLatToMeters(b.lng, b.lat))
 
 /**
- * Sample Poisson(λ) new ignitions for this tick. Cells within `baseExclusionM`
- * of a base or already burning are rejected. Returns the number actually added.
+ * Sample Poisson(λ) new ignitions for this tick. Cells in the ocean/water,
+ * within `baseExclusionM` of a base, or already burning are rejected. Returns
+ * the number actually added.
  */
 export function stepIgnition(
   rng: Rng,
@@ -32,6 +34,9 @@ export function stepIgnition(
     }
     const id = cellIdOf(p)
     if (fires.has(id)) continue
+    // Fires only start on land — reject ocean/water cells. Test the cell's
+    // center (what actually burns), so the stored fire is definitively on land.
+    if (!isOnLand(cellCenter(id))) continue
     let tooClose = false
     for (const bm of BASE_METERS) {
       if (distance(p, bm) < cfg.baseExclusionM) {

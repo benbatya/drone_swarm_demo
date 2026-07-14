@@ -58,8 +58,11 @@ function ms(inPath, outPath, ...cmds) {
 }
 
 // out name, source NE layer, mapshaper ops (a -clip is always applied first)
+// `dir` overrides the default OUT dir. `land` lives in the sim (fires may only
+// ignite on land — see src/sim/land.ts); the basemap imports it from there.
+const SIM = join(root, 'src/sim')
 const LAYERS = [
-  { out: 'land', src: 'ne_10m_land', ops: '-simplify 12% keep-shapes -filter-fields' },
+  { out: 'land', src: 'ne_10m_land', ops: '-simplify 12% keep-shapes -filter-fields', dir: SIM },
   { out: 'lakes', src: 'ne_10m_lakes', ops: '-simplify 15% keep-shapes -filter-fields' },
   { out: 'rivers', src: 'ne_10m_rivers_lake_centerlines', ops: '-simplify 12% -filter-fields' },
   { out: 'states', src: 'ne_10m_admin_1_states_provinces_lines', ops: '-simplify 10% -filter-fields' },
@@ -69,9 +72,9 @@ const LAYERS = [
 ]
 
 console.log(`Building basemap GeoJSON → ${OUT}`)
-for (const { out, src, ops } of LAYERS) {
+for (const { out, src, ops, dir } of LAYERS) {
   const inPath = await fetchNE(src)
-  const outPath = join(OUT, `${out}.json`)
+  const outPath = join(dir ?? OUT, `${out}.json`)
   ms(inPath, outPath, `-clip bbox=${bbox}`, ops)
   const kb = (statSync(outPath).size / 1024).toFixed(0)
   const gj = JSON.parse(readFileSync(outPath, 'utf8'))

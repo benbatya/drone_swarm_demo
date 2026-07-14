@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { BBOX } from '../../sim/config'
 import { basemapLayers } from './basemap'
-import landData from './geo/land.json'
+import landData from '../../sim/land.json'
 import placesData from './geo/places.json'
 
 const M = 0.35 // clip margin used by scripts/build-basemap.mjs (plus slack)
