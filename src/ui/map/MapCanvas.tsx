@@ -10,10 +10,10 @@ import { useUIStore, type Tab } from '../store'
 import { consoleLayers } from './consoleLayers'
 import { buildGraticule, type GridLine } from './graticule'
 import { baseLayers, droneLayers, fireLayer } from './layers'
-import { terrainLayers } from './terrain'
+import { basemapLayers } from './basemap'
 
 // Flat inline style so the app boots fully offline (no tile/glyph fetches).
-// Background is ocean; land is drawn as a deck.gl polygon (see terrain.ts).
+// Background is ocean; land + geography are deck.gl layers (see basemap.ts).
 const FLAT_STYLE: StyleSpecification = {
   version: 8,
   sources: {},
@@ -67,10 +67,11 @@ export function MapCanvas({ source }: { source: Tab }) {
       })
       const snap = snapRef.current
       const s = store()
+      const basemap = basemapLayers({ hillshade: s.showHillshade })
       if (sourceRef.current === 'truth') {
         overlay.setProps({
           layers: [
-            ...terrainLayers(),
+            ...basemap,
             grat,
             ...baseLayers(),
             ...fireLayer(snap.fires, s.selectFire),
@@ -84,7 +85,7 @@ export function MapCanvas({ source }: { source: Tab }) {
       } else {
         overlay.setProps({
           layers: [
-            ...terrainLayers(),
+            ...basemap,
             grat,
             ...baseLayers(),
             ...consoleLayers(snap.console, {

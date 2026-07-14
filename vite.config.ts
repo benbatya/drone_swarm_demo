@@ -8,9 +8,10 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   build: {
-    // The deck.gl + MapLibre render stack is inherently large; it's a single
-    // long-lived SPA so one chunk is acceptable. Raise the warning threshold.
-    chunkSizeWarningLimit: 2000,
+    // The deck.gl + MapLibre render stack (plus the bundled Natural Earth
+    // basemap GeoJSON) is inherently large; it's a single long-lived SPA so one
+    // chunk is acceptable. Raise the warning threshold.
+    chunkSizeWarningLimit: 2500,
   },
   test: {
     globals: true,

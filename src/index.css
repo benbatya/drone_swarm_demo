@@ -137,6 +137,30 @@ body {
   position: absolute;
   inset: 0;
 }
+.map-toggle {
+  position: absolute;
+  z-index: 2;
+  bottom: 12px;
+  right: 12px;
+  background: rgba(9, 14, 26, 0.82);
+  border: 1px solid #22304c;
+  color: #9fb0c8;
+  border-radius: 6px;
+  padding: 5px 11px;
+  font: inherit;
+  font-size: 0.8em;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+.map-toggle:hover {
+  border-color: #3a5c8c;
+  color: #cdd8ea;
+}
+.map-toggle.active {
+  background: #1c3a63;
+  color: #eaf2ff;
+  border-color: #3a5c8c;
+}
 .maplibregl-map {
   background: #0b1220;
 }

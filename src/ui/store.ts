@@ -24,6 +24,9 @@ interface UIState {
   clearSelection: () => void
   draftRect: DraftRect | null
   setDraftRect: (r: DraftRect | null) => void
+  /** Shaded-relief basemap toggle — shared across both tabs. */
+  showHillshade: boolean
+  toggleHillshade: () => void
 }
 
 // Local, console-side UI state. The two tabs share one view component and
@@ -37,4 +40,6 @@ export const useUIStore = create<UIState>((set) => ({
   clearSelection: () => set({ selection: null }),
   draftRect: null,
   setDraftRect: (r) => set({ draftRect: r }),
+  showHillshade: false,
+  toggleHillshade: () => set((s) => ({ showHillshade: !s.showHillshade })),
 }))
