@@ -3,6 +3,7 @@ import { ScatterplotLayer, TextLayer, LineLayer } from '@deck.gl/layers'
 import { BASES, type Base } from '../../sim/config'
 import { lngLatToMeters, metersToLngLat } from '../../sim/geo'
 import type { DroneView, FireView } from '../../sim/snapshot'
+import { hsvToRgb } from './colors'
 
 // Base markers + labels.
 export function baseLayers(): Layer[] {
@@ -78,10 +79,10 @@ function headingEndpoint(
   return [ll.lng, ll.lat]
 }
 
-const DRONE_FILL: Record<DroneView['status'], [number, number, number]> = {
-  airborne: [80, 220, 130], // current/live = green (ground truth is always current)
-  docked: [130, 150, 180],
-  crashed: [255, 80, 80],
+// Ground truth is always current, so drones show their full-value identity hue;
+// a crashed drone is dimmed (low value) to read as lost.
+function droneFill(d: DroneView): [number, number, number] {
+  return hsvToRgb(d.hue, 1, d.status === 'crashed' ? 0.35 : 1)
 }
 
 export interface DroneLayerOpts {
@@ -129,7 +130,7 @@ export function droneLayers(drones: DroneView[], opts: DroneLayerOpts): Layer[] 
       getRadius: 6,
       radiusUnits: 'pixels',
       radiusMinPixels: 5,
-      getFillColor: (d) => DRONE_FILL[d.status],
+      getFillColor: droneFill,
       stroked: true,
       lineWidthUnits: 'pixels',
       getLineWidth: 1.5,

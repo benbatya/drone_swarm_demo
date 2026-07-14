@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ConsoleDroneView, ConsoleView, FireView } from '../../sim/snapshot'
 import { useUIStore } from '../store'
 import { useSimSnapshot } from '../useSimSnapshot'
+import { hsvToRgb, rgbCss, staleValue } from '../map/colors'
 import { DirectiveComposer } from './DirectiveComposer'
 import { Row } from './bits'
 
@@ -30,7 +31,10 @@ function ConsoleFleetList({
           className={'fleet-row' + (d.id === selectedId ? ' selected' : '')}
           onClick={() => onSelect(d.id)}
         >
-          <span className={`dot stale-${d.staleness}`} />
+          <span
+            className="dot"
+            style={{ background: rgbCss(hsvToRgb(d.hue, 1, staleValue(d.contactAgeMin))) }}
+          />
           <span className="fl-id">{d.id}</span>
           <span className={'fl-mode stale-text-' + d.staleness}>
             {d.contactAgeMin == null ? '—' : `${d.contactAgeMin}m ago`}

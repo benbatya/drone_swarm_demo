@@ -6,7 +6,7 @@ import { parseDroneId, scanSectorFor } from '../../sim/drones/scanSectors'
 import { lngLatToMeters, metersToLngLat } from '../../sim/geo'
 import type { ConsoleDroneView, ConsoleView, FireView } from '../../sim/snapshot'
 import type { DraftRect } from '../store'
-import { stalenessColor } from './colors'
+import { hsvToRgb, staleValue } from './colors'
 
 export interface ConsoleLayerOpts {
   onSelectDrone?: (id: string) => void
@@ -72,8 +72,10 @@ function headingEndpoint(
   return [ll.lng, ll.lat]
 }
 
+// The drone's signature hue, darkened by its contact age (value drops 1/min
+// while blacked out, restored on the next sync).
 const col = (d: ConsoleDroneView, alpha: number): [number, number, number, number] => {
-  const [r, g, b] = stalenessColor(d.stalenessFrac)
+  const [r, g, b] = hsvToRgb(d.hue, 1, staleValue(d.contactAgeMin))
   return [r, g, b, alpha]
 }
 
