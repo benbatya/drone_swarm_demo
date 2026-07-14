@@ -22,6 +22,8 @@ export type DroneMode =
 export interface DroneView {
   id: string
   homeBaseId: string
+  /** Signature hue (degrees) — evenly spaced per drone; identity color. */
+  hue: number
   position: [number, number]
   heading: number
   status: DroneStatus
@@ -48,6 +50,8 @@ export type Staleness = 'unknown' | 'fresh' | 'stale' | 'missing'
 export interface ConsoleDroneView {
   id: string
   homeBaseId: string
+  /** Signature hue (degrees) — matches this drone's God-Mode identity color. */
+  hue: number
   staleness: Staleness
   /** 0 = fresh … 1 = missing; drives the green→blue color fade. */
   stalenessFrac: number
@@ -128,9 +132,13 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
   const cfg = w.cfg
   const now = w.tick
   const drones: ConsoleDroneView[] = []
+  // Stable per-drone hue matching the God-Mode identity color.
+  const order = new Map(w.drones.map((d, i) => [d.id, i]))
+  const fleetN = w.drones.length
 
   for (const rec of w.console.drones.values()) {
     const homeBaseId = rec.id.replace(/-\d+$/, '')
+    const hue = ((order.get(rec.id) ?? 0) * 360) / fleetN
     const pendingCount = rec.pending.length
     const downloadedCount = rec.pending.filter((p) => p.downloadedAt != null).length
 
@@ -138,6 +146,7 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
       drones.push({
         id: rec.id,
         homeBaseId,
+        hue,
         staleness: 'unknown',
         stalenessFrac: 1,
         lastContactAt: null,
@@ -187,6 +196,7 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
     drones.push({
       id: rec.id,
       homeBaseId,
+      hue,
       staleness,
       stalenessFrac,
       lastContactAt: rec.lastContactAt,
@@ -218,11 +228,13 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
 }
 
 export function buildSnapshot(w: GroundTruth, meta: SnapshotMeta): TruthSnapshot {
-  const drones: DroneView[] = w.drones.map((d) => {
+  const fleetN = w.drones.length
+  const drones: DroneView[] = w.drones.map((d, i) => {
     const ll = metersToLngLat(d.pos.x, d.pos.y)
     return {
       id: d.id,
       homeBaseId: d.homeBaseId,
+      hue: (i * 360) / fleetN,
       position: [ll.lng, ll.lat],
       heading: d.heading,
       status: d.status,

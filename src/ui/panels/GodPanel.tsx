@@ -1,5 +1,6 @@
 import { useSimSnapshot } from '../useSimSnapshot'
 import { useUIStore } from '../store'
+import { hsvToRgb, rgbCss } from '../map/colors'
 import { ConfigPanel } from './ConfigPanel'
 import { DronePanelTruth } from './DronePanelTruth'
 import { FirePanel } from './FirePanel'
@@ -34,7 +35,10 @@ export function GodPanel() {
               className="fleet-row"
               onClick={() => selectDrone(d.id)}
             >
-              <span className={`dot ${d.status}`} />
+              <span
+                className="dot"
+                style={{ background: rgbCss(hsvToRgb(d.hue, 1, d.status === 'crashed' ? 0.35 : 1)) }}
+              />
               <span className="fl-id">{d.id}</span>
               <span className="fl-mode">{d.mode}</span>
               <span className="fl-fuel">{Math.round(d.fuelFrac * 100)}%</span>

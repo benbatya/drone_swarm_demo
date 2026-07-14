@@ -1,19 +1,36 @@
 export type RGB = [number, number, number]
 
-export function lerp(a: RGB, b: RGB, t: number): RGB {
-  const c = Math.max(0, Math.min(1, t))
+/** HSV → RGB. `h` in degrees, `s` and `v` in [0,1]. Returns 0–255 ints. */
+export function hsvToRgb(h: number, s: number, v: number): RGB {
+  const hp = (((h % 360) + 360) % 360) / 60
+  const c = v * s
+  const x = c * (1 - Math.abs((hp % 2) - 1))
+  const m = v - c
+  let r = 0
+  let g = 0
+  let b = 0
+  if (hp < 1) [r, g] = [c, x]
+  else if (hp < 2) [r, g] = [x, c]
+  else if (hp < 3) [g, b] = [c, x]
+  else if (hp < 4) [g, b] = [x, c]
+  else if (hp < 5) [r, b] = [x, c]
+  else [r, b] = [c, x]
   return [
-    Math.round(a[0] + (b[0] - a[0]) * c),
-    Math.round(a[1] + (b[1] - a[1]) * c),
-    Math.round(a[2] + (b[2] - a[2]) * c),
+    Math.round((r + m) * 255),
+    Math.round((g + m) * 255),
+    Math.round((b + m) * 255),
   ]
 }
 
-/** Current/fresh drones render green; they fade to blue as staleness grows. */
-export const FRESH_GREEN: RGB = [80, 220, 130]
-export const STALE_BLUE: RGB = [70, 130, 255]
-
-/** Staleness color for a fraction in [0,1] (0 = fresh, 1 = missing). */
-export function stalenessColor(frac: number): RGB {
-  return lerp(FRESH_GREEN, STALE_BLUE, frac)
+/**
+ * Console brightness (HSV value) derived from contact age. Full (1.0) when
+ * fresh, then dropping by 1-per-minute on a 0–100 scale (i.e. −0.01/min) for
+ * every minute a drone is blacked out, floored at 0 (black). A successful sync
+ * resets contact age to 0, restoring the value to maximum.
+ */
+export function staleValue(contactAgeMin: number | null): number {
+  if (contactAgeMin == null) return 0
+  return Math.max(0, 1 - contactAgeMin / 100)
 }
+
+export const rgbCss = ([r, g, b]: RGB): string => `rgb(${r}, ${g}, ${b})`
