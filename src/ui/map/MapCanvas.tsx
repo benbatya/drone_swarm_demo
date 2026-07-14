@@ -11,6 +11,7 @@ import { consoleLayers } from './consoleLayers'
 import { buildGraticule, type GridLine } from './graticule'
 import { baseLayers, droneLayers, fireLayer } from './layers'
 import { basemapLayers } from './basemap'
+import { scanZoneLayers } from './scanZones'
 
 // Flat inline style so the app boots fully offline (no tile/glyph fetches).
 // Background is ocean; land + geography are deck.gl layers (see basemap.ts).
@@ -68,12 +69,17 @@ export function MapCanvas({ source }: { source: Tab }) {
       const snap = snapRef.current
       const s = store()
       const basemap = basemapLayers({ hillshade: s.showHillshade })
+      const scanOpts = {
+        selectedId: s.selection?.kind === 'drone' ? s.selection.id : null,
+        showAll: s.showAllScans,
+      }
       if (sourceRef.current === 'truth') {
         overlay.setProps({
           layers: [
             ...basemap,
             grat,
             ...baseLayers(),
+            ...scanZoneLayers(snap.drones, scanOpts),
             ...fireLayer(snap.fires, s.selectFire),
             ...droneLayers(snap.drones, {
               showDetection: true,
@@ -88,11 +94,11 @@ export function MapCanvas({ source }: { source: Tab }) {
             ...basemap,
             grat,
             ...baseLayers(),
+            ...scanZoneLayers(snap.console.drones, scanOpts),
             ...consoleLayers(snap.console, {
               onSelectDrone: s.selectDrone,
               onSelectFire: s.selectFire,
               draftRect: s.draftRect,
-              selectedDroneId: s.selection?.kind === 'drone' ? s.selection.id : null,
             }),
           ],
         })

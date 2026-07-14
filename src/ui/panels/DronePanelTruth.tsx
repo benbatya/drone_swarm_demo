@@ -7,16 +7,18 @@ export function DronePanelTruth({
   onBack,
 }: {
   drone: DroneView
-  onBack: () => void
+  onBack?: () => void
 }) {
   const fuelColor =
     drone.fuelFrac < 0.2 ? '#ff6a6a' : drone.fuelFrac < 0.4 ? '#ffb454' : '#5ce0a0'
   return (
     <div className="panel">
       <div className="panel-head">
-        <button type="button" className="link" onClick={onBack}>
-          ← fleet
-        </button>
+        {onBack && (
+          <button type="button" className="link" onClick={onBack}>
+            ← fleet
+          </button>
+        )}
         <span className="panel-title">{drone.id}</span>
       </div>
       <Row k="Home" v={drone.homeBaseId} />

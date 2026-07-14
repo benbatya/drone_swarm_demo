@@ -27,6 +27,9 @@ interface UIState {
   /** Shaded-relief basemap toggle — shared across both tabs. */
   showHillshade: boolean
   toggleHillshade: () => void
+  /** Show every drone's scan zone (not just the selected one) — both tabs. */
+  showAllScans: boolean
+  toggleAllScans: () => void
 }
 
 // Local, console-side UI state. The two tabs share one view component and
@@ -42,4 +45,6 @@ export const useUIStore = create<UIState>((set) => ({
   setDraftRect: (r) => set({ draftRect: r }),
   showHillshade: false,
   toggleHillshade: () => set((s) => ({ showHillshade: !s.showHillshade })),
+  showAllScans: false,
+  toggleAllScans: () => set((s) => ({ showAllScans: !s.showAllScans })),
 }))

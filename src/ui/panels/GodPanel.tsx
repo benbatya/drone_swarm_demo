@@ -7,32 +7,42 @@ import { FirePanel } from './FirePanel'
 import { Row } from './bits'
 import type { ReactNode } from 'react'
 
-// God Mode side panel: ground-truth config + fleet summary or a selected detail.
+// God Mode side panel: ground-truth config, the full fleet list, and — when a
+// drone or fire is selected — its detail below the list.
 export function GodPanel() {
   const snap = useSimSnapshot()
   const selection = useUIStore((s) => s.selection)
   const selectDrone = useUIStore((s) => s.selectDrone)
   const clear = useUIStore((s) => s.clearSelection)
 
-  let content: ReactNode
-  if (selection?.kind === 'drone') {
-    const d = snap.drones.find((x) => x.id === selection.id)
-    if (d) content = <DronePanelTruth drone={d} onBack={clear} />
-  } else if (selection?.kind === 'fire') {
-    const f = snap.fires.find((x) => x.cellId === selection.cellId)
-    if (f) content = <FirePanel fire={f} tick={snap.tick} onBack={clear} />
-  }
+  const selDrone =
+    selection?.kind === 'drone' ? snap.drones.find((x) => x.id === selection.id) : undefined
+  const selFire =
+    selection?.kind === 'fire' ? snap.fires.find((x) => x.cellId === selection.cellId) : undefined
 
-  if (!content) {
-    content = (
+  let detail: ReactNode
+  if (selDrone) detail = <DronePanelTruth drone={selDrone} />
+  else if (selFire) detail = <FirePanel fire={selFire} tick={snap.tick} />
+
+  return (
+    <div className="god-panel">
+      <ConfigPanel />
+      <hr className="sep" />
       <div className="panel">
-        <div className="panel-title">Fleet · {snap.drones.length}</div>
+        <div className="panel-head">
+          <span className="panel-title">Fleet · {snap.drones.length}</span>
+          {selection && (
+            <button type="button" className="link" onClick={clear}>
+              clear
+            </button>
+          )}
+        </div>
         <div className="fleet-list">
           {snap.drones.map((d) => (
             <button
               key={d.id}
               type="button"
-              className="fleet-row"
+              className={'fleet-row' + (d.id === selDrone?.id ? ' selected' : '')}
               onClick={() => selectDrone(d.id)}
             >
               <span
@@ -52,14 +62,13 @@ export function GodPanel() {
           <Row k="Fire-minutes" v={Math.round(snap.score.fireMinutes).toLocaleString()} />
         </div>
       </div>
-    )
-  }
 
-  return (
-    <div className="god-panel">
-      <ConfigPanel />
-      <hr className="sep" />
-      {content}
+      {detail && (
+        <>
+          <hr className="sep" />
+          {detail}
+        </>
+      )}
     </div>
   )
 }

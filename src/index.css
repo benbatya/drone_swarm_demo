@@ -137,11 +137,17 @@ body {
   position: absolute;
   inset: 0;
 }
-.map-toggle {
+.map-toggles {
   position: absolute;
   z-index: 2;
   bottom: 12px;
   right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+.map-toggle {
   background: rgba(9, 14, 26, 0.82);
   border: 1px solid #22304c;
   color: #9fb0c8;

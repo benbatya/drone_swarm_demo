@@ -63,5 +63,12 @@ test('sim boots, runs >=1000 frames, and advances state with no console errors',
   await page.getByRole('button', { name: 'User Console' }).click()
   await expect(page.getByTestId('hillshade-toggle')).toHaveAttribute('aria-pressed', 'true') // shared across tabs
 
+  // Scan-zones toggle: present and renders all zones without console errors.
+  const scanToggle = page.getByTestId('scan-zones-toggle')
+  await expect(scanToggle).toBeVisible()
+  await scanToggle.click()
+  await expect(scanToggle).toHaveAttribute('aria-pressed', 'true')
+  await page.waitForTimeout(400)
+
   expect(errors, `page/console errors:\n${errors.join('\n')}`).toEqual([])
 })
