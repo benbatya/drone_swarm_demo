@@ -8,15 +8,17 @@ export function FirePanel({
 }: {
   fire: FireView
   tick: number
-  onBack: () => void
+  onBack?: () => void
 }) {
   const alightMin = Math.max(0, tick - fire.ignitedAt)
   return (
     <div className="panel">
       <div className="panel-head">
-        <button type="button" className="link" onClick={onBack}>
-          ← fleet
-        </button>
+        {onBack && (
+          <button type="button" className="link" onClick={onBack}>
+            ← fleet
+          </button>
+        )}
         <span className="panel-title">Fire #{fire.cellId}</span>
       </div>
       <Row

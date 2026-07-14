@@ -1,5 +1,6 @@
 import { HillshadeToggle } from './map/HillshadeToggle'
 import { MapCanvas } from './map/MapCanvas'
+import { ScanZonesToggle } from './map/ScanZonesToggle'
 import { ConsolePanel } from './panels/ConsolePanel'
 import { GodPanel } from './panels/GodPanel'
 import type { Tab } from './store'
@@ -20,7 +21,10 @@ export function SimulationView({ source }: { source: Tab }) {
             {title}
           </div>
           <MapCanvas source={source} />
-          <HillshadeToggle />
+          <div className="map-toggles">
+            <HillshadeToggle />
+            <ScanZonesToggle />
+          </div>
         </div>
         <aside className="side-panel">
           {source === 'truth' ? <GodPanel /> : <ConsolePanel />}
