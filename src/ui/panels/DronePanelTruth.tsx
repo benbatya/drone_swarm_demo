@@ -24,6 +24,12 @@ export function DronePanelTruth({
       <Row k="Home" v={drone.homeBaseId} />
       <Row k="Status" v={drone.status} warn={drone.status === 'crashed'} />
       <Row k="Mode" v={drone.mode} />
+      {(drone.mode === 'patrol' || drone.mode === 'scan') && (
+        <>
+          <Row k="Sweep" v={drone.scanOrientation} />
+          <Row k="Scan" v={`${Math.round(drone.scanFrac * 100)}%`} />
+        </>
+      )}
       <Row
         k="Position"
         v={`${drone.position[1].toFixed(3)}, ${drone.position[0].toFixed(3)}`}

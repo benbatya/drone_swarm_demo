@@ -1,10 +1,14 @@
 import type { Layer } from '@deck.gl/core'
 import { PathLayer, PolygonLayer } from '@deck.gl/layers'
-import { BASES } from '../../sim/config'
-import { buildLawnmower } from '../../sim/directives/scanExec'
+import { BASES, makeConfig } from '../../sim/config'
+import { buildLawnmower, sweepSpacingM } from '../../sim/directives/scanExec'
 import { parseDroneId, scanSectorFor } from '../../sim/drones/scanSectors'
 import { lngLatToMeters, metersToLngLat } from '../../sim/geo'
 import { hsvToRgb, type RGB } from './colors'
+
+// Representative sweep spacing for the zone preview (uses the default config's
+// detection radius; the live sim derives the same from its own cfg).
+const PREVIEW_SPACING_M = sweepSpacingM(makeConfig())
 
 // A drone's fixed scan zone + lawnmower "hatches", drawn in the drone's own hue.
 // Shared by both tabs (God Mode and User Console). Shows the selected drone's
@@ -37,7 +41,12 @@ function zoneFor(d: ScanDrone): ZoneDatum | null {
   ]
   const base = BASES.find((b) => b.id === parseDroneId(d.id)?.baseId)
   const entry = base ? lngLatToMeters(base.lng, base.lat) : { x: rect.minX, y: rect.minY }
-  const path: LL[] = buildLawnmower(rect, entry).map((w) => toLL(w.x, w.y))
+  // Preview shows the sector's default (horizontal) sweep; the live drone
+  // alternates H/V as it completes passes.
+  const orientation = rect.maxX - rect.minX >= rect.maxY - rect.minY ? 'horizontal' : 'vertical'
+  const path: LL[] = buildLawnmower(rect, entry, PREVIEW_SPACING_M, orientation).map((w) =>
+    toLL(w.x, w.y),
+  )
   return { hue: d.hue, ring, path }
 }
 

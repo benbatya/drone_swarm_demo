@@ -59,7 +59,7 @@ type Slot = 'override' | 'operator' | 'auto' | 'patrol'
 function pickActive(d: DroneTruth, w: GroundTruth): { exec: DirectiveExec; slot: Slot } {
   if (d.override) return { exec: d.override, slot: 'override' }
   if (d.queue.length > 0) {
-    if (!d.exec) activateHead(d)
+    if (!d.exec) activateHead(d, w.cfg)
     return { exec: d.exec!, slot: 'operator' }
   }
   // Autonomous idle: self-engage nearest known in-range fire, else autoPatrol.
@@ -99,7 +99,7 @@ export function tickWorld(w: GroundTruth, rng: Rng): void {
         d.override = null
         d.forcedRtb = false
       } else if (slot === 'operator') {
-        completeHead(d)
+        completeHead(d, cfg)
       } else if (slot === 'auto') {
         d.autoExec = null
       }

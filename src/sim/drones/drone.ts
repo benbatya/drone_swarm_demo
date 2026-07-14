@@ -11,6 +11,7 @@ import type {
   RectM,
   RtbExec,
   ScanExec,
+  ScanOrientation,
 } from '../directives/types'
 
 export type DroneStatus = 'airborne' | 'docked' | 'crashed'
@@ -49,6 +50,11 @@ export interface DroneTruth {
   autoPatrol: ScanExec
   /** Self-assigned idle extinguish, re-evaluated each tick. */
   autoExec: DirectiveExec | null
+
+  /** Current sweep direction; flips each time a full sector pass completes. */
+  scanOrientation: ScanOrientation
+  /** Progress (0..1) through the current sweep pass; persists across diversions. */
+  scanFrac: number
 
   /** Directive ids aborted since last sync (reported to console in M3). */
   abortedIds: string[]
@@ -100,11 +106,26 @@ export function createFleet(cfg: SimConfig): DroneTruth[] {
         scanProgress: new Map<string, number>(),
         override: null,
         forcedRtb: false,
-        autoPatrol: makeScanExec(rect, Infinity, home),
+        scanOrientation: 'horizontal',
+        scanFrac: 0,
+        autoPatrol: makeScanExec(rect, Infinity, home, cfg, 'horizontal'),
         autoExec: null,
         abortedIds: [],
       })
     }
   }
   return drones
+}
+
+/**
+ * True when the drone is currently flying a sweep (an operator scan directive
+ * or the idle autoPatrol) rather than transiting straight to a fire / base.
+ * Mirrors the mode arbitration in {@link modeOf}.
+ */
+export function isScanning(d: DroneTruth): boolean {
+  if (d.status !== 'airborne') return false
+  if (d.override) return false
+  if (d.exec) return d.exec.kind === 'scan'
+  if (d.autoExec) return false
+  return true // idle → autoPatrol
 }

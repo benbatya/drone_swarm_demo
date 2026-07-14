@@ -4,6 +4,15 @@ import { cellCenter, metersToLngLat } from './geo'
 import type { CellId } from './geo'
 import { activeKnownCount } from './belief/droneBelief'
 import type { DroneStatus, DroneTruth } from './drones/drone'
+import { scanSectorFor } from './drones/scanSectors'
+import {
+  buildLawnmower,
+  nearestArcLength,
+  pathLength,
+  pointAtDistance,
+  sweepSpacingM,
+} from './directives/scanExec'
+import type { ScanOrientation } from './directives/types'
 import type { GroundTruth } from './world'
 
 // Render-facing view of the world. Rebuilt each frame; flat and lng/lat-based
@@ -28,6 +37,10 @@ export interface DroneView {
   heading: number
   status: DroneStatus
   mode: DroneMode
+  /** Current sweep direction (shown while scanning/patrolling). */
+  scanOrientation: ScanOrientation
+  /** Progress (0..1) through the current sweep pass. */
+  scanFrac: number
   fuelL: number
   fuelFrac: number
   retardant: number
@@ -179,17 +192,43 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
     const rep = rec.reported
     const reportedLL = metersToLngLat(rep.pos.x, rep.pos.y)
 
-    // Dead reckoning: the console never has a live fix, so its best estimate of
-    // where the drone *is now* is its last position projected along the last
-    // heading for the whole contact gap. Uncertainty grows with that gap.
+    // Dead reckoning: the console never has a live fix, so it extrapolates from
+    // the last report over the whole contact gap. If the drone was flying its
+    // sweep, the best guess is that it kept following the lawnmower (which the
+    // console can reconstruct from the drone's fixed sector), so we advance it
+    // ALONG that path rather than in a straight line. Otherwise (transiting to a
+    // fire / base) we project straight along the last heading. Either way the
+    // uncertainty radius keeps growing with the gap.
     let ghostX = rep.pos.x
     let ghostY = rep.pos.y
     let uncertaintyRadiusM = 0
     if (rep.status === 'airborne') {
       const dist = cfg.speedMPerMin * age
-      ghostX = rep.pos.x + Math.sin(rep.heading) * dist
-      ghostY = rep.pos.y + Math.cos(rep.heading) * dist
       uncertaintyRadiusM = cfg.speedMPerMin * age * 0.3
+      const sector = rep.scanning ? scanSectorFor(rec.id) : null
+      if (sector) {
+        // Reconstruct the sweep, anchor at the last fix (nearest point on the
+        // path), and step `dist` forward, wrapping around the looping pattern.
+        const path = buildLawnmower(
+          sector,
+          rep.pos,
+          sweepSpacingM(cfg),
+          rep.scanOrientation,
+        )
+        const len = pathLength(path)
+        if (len > 0) {
+          const s = (nearestArcLength(path, rep.pos) + dist) % len
+          const p = pointAtDistance(path, s)
+          ghostX = p.x
+          ghostY = p.y
+        } else {
+          ghostX = rep.pos.x + Math.sin(rep.heading) * dist
+          ghostY = rep.pos.y + Math.cos(rep.heading) * dist
+        }
+      } else {
+        ghostX = rep.pos.x + Math.sin(rep.heading) * dist
+        ghostY = rep.pos.y + Math.cos(rep.heading) * dist
+      }
     }
     const ghostLL = metersToLngLat(ghostX, ghostY)
 
@@ -239,6 +278,8 @@ export function buildSnapshot(w: GroundTruth, meta: SnapshotMeta): TruthSnapshot
       heading: d.heading,
       status: d.status,
       mode: modeOf(d),
+      scanOrientation: d.scanOrientation,
+      scanFrac: d.scanFrac,
       fuelL: d.fuelL,
       fuelFrac: d.fuelL / w.cfg.fuelCapacityL,
       retardant: d.retardant,

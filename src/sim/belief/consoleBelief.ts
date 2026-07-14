@@ -1,4 +1,4 @@
-import type { Directive } from '../directives/types'
+import type { Directive, ScanOrientation } from '../directives/types'
 import type { CellId, Vec2 } from '../geo'
 import type { DroneStatus } from '../drones/drone'
 import type { KnownFire } from './droneBelief'
@@ -13,6 +13,10 @@ export interface ReportedState {
   forcedRtb: boolean
   currentDirectiveKind: string | null
   queueLen: number
+  /** Was the drone flying its sweep at last contact? Drives sweep dead-reckoning. */
+  scanning: boolean
+  /** Sweep direction at last contact, to reconstruct the lawnmower path. */
+  scanOrientation: ScanOrientation
 }
 
 export interface PendingDirective {

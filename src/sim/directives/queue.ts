@@ -1,3 +1,4 @@
+import { makeConfig, type SimConfig } from '../config'
 import type { DroneTruth } from '../drones/drone'
 import { createExec } from './executor'
 import type { Directive } from './types'
@@ -13,7 +14,7 @@ export function sortQueue(q: Directive[]): void {
  * progress is stashed so it resumes where it left off when it heads the queue
  * again. Non-scan execs simply restart.
  */
-export function activateHead(d: DroneTruth): void {
+export function activateHead(d: DroneTruth, cfg: SimConfig = makeConfig()): void {
   const head = d.queue[0]
   if (!head) {
     d.exec = null
@@ -25,24 +26,24 @@ export function activateHead(d: DroneTruth): void {
   if (d.exec && d.exec.kind === 'scan' && d.execDirId) {
     d.scanProgress.set(d.execDirId, d.exec.elapsedMin)
   }
-  d.exec = createExec(head, d, d.scanProgress.get(head.id) ?? 0)
+  d.exec = createExec(head, d, cfg, d.scanProgress.get(head.id) ?? 0)
   d.execDirId = head.id
 }
 
 /** Insert a directive (operator push / download), sort, and preempt if needed. */
-export function enqueue(d: DroneTruth, dir: Directive): void {
+export function enqueue(d: DroneTruth, dir: Directive, cfg: SimConfig = makeConfig()): void {
   d.queue.push(dir)
   sortQueue(d.queue)
-  activateHead(d)
+  activateHead(d, cfg)
 }
 
 /** Head directive completed successfully — pop and advance. */
-export function completeHead(d: DroneTruth): void {
+export function completeHead(d: DroneTruth, cfg: SimConfig = makeConfig()): void {
   const done = d.queue.shift()
   if (done && done.kind === 'scan') d.scanProgress.delete(done.id)
   d.exec = null
   d.execDirId = null
-  activateHead(d)
+  activateHead(d, cfg)
 }
 
 /** Head directive aborted (fuel/retardant) — pop, record, and advance. */

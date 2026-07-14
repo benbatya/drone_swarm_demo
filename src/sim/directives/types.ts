@@ -39,6 +39,13 @@ export type Directive = ScanDirective | ExtinguishDirective | RtbDirective
 
 // --- Executor state machines (one active per drone) ------------------------
 
+/**
+ * Which way the lawnmower legs run. 'horizontal' = long legs along x, rows
+ * stacked in y; 'vertical' = the transpose. A drone alternates between the two
+ * each time it completes a full sweep of its sector.
+ */
+export type ScanOrientation = 'horizontal' | 'vertical'
+
 export interface ScanExec {
   kind: 'scan'
   rect: RectM
@@ -46,6 +53,7 @@ export interface ScanExec {
   elapsedMin: number
   waypoints: import('../geo').Vec2[]
   idx: number
+  orientation: ScanOrientation
 }
 
 export interface ExtinguishExec {

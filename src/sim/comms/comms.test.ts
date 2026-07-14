@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { makeConfig } from '../config'
+import { scanSectorFor } from '../drones/scanSectors'
+import { lngLatToMeters } from '../geo'
 import { makeRng } from '../rng'
 import { buildSnapshot } from '../snapshot'
 import { createWorld, tickWorld, type GroundTruth } from '../world'
@@ -164,6 +166,8 @@ describe('console staleness derivation', () => {
       forcedRtb: false,
       currentDirectiveKind: null,
       queueLen: 0,
+      scanning: false,
+      scanOrientation: 'horizontal',
     }
     w.tick = 1000
     rec.lastContactAt = 1000 - age
@@ -183,5 +187,45 @@ describe('console staleness derivation', () => {
     expect(stalenessAt(10)).toBe('fresh') // < 40
     expect(stalenessAt(50)).toBe('stale') // 40 < age <= 64
     expect(stalenessAt(70)).toBe('missing') // > 64
+  })
+})
+
+describe('sweep-following dead reckoning under blackout', () => {
+  const ghostOf = (scanning: boolean): [number, number] => {
+    const w = createWorld(cfg0())
+    const rect = scanSectorFor('redding-1')!
+    const rec = w.console.drones.get('redding-1')!
+    // Last fix: mid-sector, heading due east (straight-line would exit the box).
+    rec.reported = {
+      pos: { x: (rect.minX + rect.maxX) / 2, y: (rect.minY + rect.maxY) / 2 },
+      heading: Math.PI / 2,
+      fuelL: 500,
+      retardant: 5,
+      status: 'airborne',
+      forcedRtb: false,
+      currentDirectiveKind: null,
+      queueLen: 0,
+      scanning,
+      scanOrientation: 'horizontal',
+    }
+    w.tick = 1000
+    rec.lastContactAt = 1000 - 60 // 60 min blackout
+    const snap = buildSnapshot(w, { running: true, speed: 1, version: 1, seasonComplete: false })
+    return snap.console.drones.find((d) => d.id === 'redding-1')!.ghostPosition!
+  }
+
+  it('keeps the scanning ghost inside its sector, unlike a straight-line guess', () => {
+    const rect = scanSectorFor('redding-1')!
+    const toM = (ll: [number, number]) => lngLatToMeters(ll[0], ll[1])
+    const sweep = toM(ghostOf(true))
+    const straight = toM(ghostOf(false))
+    const inSector = (p: { x: number; y: number }) =>
+      p.x >= rect.minX - 1 && p.x <= rect.maxX + 1 && p.y >= rect.minY - 1 && p.y <= rect.maxY + 1
+    // Following the lawnmower keeps it within the assigned box...
+    expect(inSector(sweep)).toBe(true)
+    // ...whereas dead-reckoning straight east over 60 min flies it out.
+    expect(inSector(straight)).toBe(false)
+    // And the two estimates genuinely differ.
+    expect(Math.hypot(sweep.x - straight.x, sweep.y - straight.y)).toBeGreaterThan(1000)
   })
 })

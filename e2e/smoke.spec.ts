@@ -53,20 +53,26 @@ test('sim boots, runs >=1000 frames, and advances state with no console errors',
   const moved = s2!.drone0[0] !== s1!.drone0[0] || s2!.drone0[1] !== s1!.drone0[1]
   expect(moved).toBe(true)
 
-  // Terrain (hillshade) toggle is present on both tabs and loads its raster
-  // same-origin without emitting console errors.
+  // Terrain (hillshade) toggle is present on both tabs, defaults ON, and loads
+  // its raster same-origin without emitting console errors.
   const toggle = page.getByTestId('hillshade-toggle')
   await expect(toggle).toBeVisible()
-  await toggle.click() // turn hillshade on
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true') // on by default
+  await toggle.click() // off
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  await toggle.click() // back on
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
   await page.waitForTimeout(500)
   await page.getByRole('button', { name: 'User Console' }).click()
   await expect(page.getByTestId('hillshade-toggle')).toHaveAttribute('aria-pressed', 'true') // shared across tabs
 
-  // Scan-zones toggle: present and renders all zones without console errors.
+  // Scan-zones toggle: present, defaults ON, renders all zones without errors.
   const scanToggle = page.getByTestId('scan-zones-toggle')
   await expect(scanToggle).toBeVisible()
-  await scanToggle.click()
+  await expect(scanToggle).toHaveAttribute('aria-pressed', 'true') // on by default
+  await scanToggle.click() // off
+  await expect(scanToggle).toHaveAttribute('aria-pressed', 'false')
+  await scanToggle.click() // back on
   await expect(scanToggle).toHaveAttribute('aria-pressed', 'true')
   await page.waitForTimeout(400)
 

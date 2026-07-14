@@ -1,6 +1,7 @@
+import type { SimConfig } from '../config'
 import type { ConsoleBelief, ConsoleDroneRecord } from '../belief/consoleBelief'
 import { enqueue } from '../directives/queue'
-import type { DroneTruth } from '../drones/drone'
+import { isScanning, type DroneTruth } from '../drones/drone'
 import type { GroundTruth } from '../world'
 import { isDarkAt } from './blackout'
 import { mergeFire } from './merge'
@@ -16,6 +17,8 @@ function uploadTelemetry(rec: ConsoleDroneRecord, d: DroneTruth, now: number): v
     forcedRtb: d.forcedRtb,
     currentDirectiveKind: d.queue[0]?.kind ?? null,
     queueLen: d.queue.length,
+    scanning: isScanning(d),
+    scanOrientation: d.scanOrientation,
   }
 }
 
@@ -35,10 +38,10 @@ function reconcilePending(rec: ConsoleDroneRecord, d: DroneTruth): void {
   d.abortedIds.length = 0 // reported and consumed
 }
 
-function download(rec: ConsoleDroneRecord, d: DroneTruth, now: number): void {
+function download(rec: ConsoleDroneRecord, d: DroneTruth, now: number, cfg: SimConfig): void {
   for (const p of rec.pending) {
     if (p.downloadedAt == null) {
-      enqueue(d, p.directive)
+      enqueue(d, p.directive, cfg)
       p.downloadedAt = now
     }
   }
@@ -79,7 +82,7 @@ export function stepSync(w: GroundTruth): void {
       uploadTelemetry(rec, d, now)
       uploadFires(w.console, d, c.lastSyncAt)
       reconcilePending(rec, d)
-      download(rec, d, now)
+      download(rec, d, now, cfg)
     }
     c.lastSyncAt = now
     c.retryIntervalMin = 0

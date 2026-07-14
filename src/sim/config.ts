@@ -64,7 +64,7 @@ export const TICKS_PER_SEASON = TICKS_PER_DAY * SEASON_DAYS // 43,200
  */
 export const REAL_SEC_PER_TICK = 60
 /** Playback speed multipliers (× realtime). ×1 = true realtime (1 tick/min). */
-export const SPEED_MULTIPLIERS = [1, 30, 120, 480, 960, 1800] as const
+export const SPEED_MULTIPLIERS = [1, 30, 180, 480, 960, 1800] as const
 /** Default playback speed (× realtime) — true realtime. */
 export const DEFAULT_SPEED = 1
 /** Upper bound on ticks processed in a single rAF frame (fast-forward cap). */
