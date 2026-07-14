@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { BASES } from '../../sim/config'
-import { lngLatToMeters } from '../../sim/geo'
+import { clampToWorld, lngLatToMeters } from '../../sim/geo'
 import type { Directive, RectM } from '../../sim/directives/types'
 import { useRunner } from '../RunnerContext'
 import { useUIStore, type DraftRect } from '../store'
@@ -9,8 +9,10 @@ let idSeq = 0
 const nextId = () => `op-${++idSeq}`
 
 function draftToRectM(r: DraftRect): RectM {
-  const a = lngLatToMeters(r.west, r.south)
-  const b = lngLatToMeters(r.east, r.north)
+  // Clamp to the world bounds so a scan (and the drone flying it) never leaves
+  // the map, even if the operator dragged past the edge.
+  const a = clampToWorld(lngLatToMeters(r.west, r.south))
+  const b = clampToWorld(lngLatToMeters(r.east, r.north))
   return {
     minX: Math.min(a.x, b.x),
     minY: Math.min(a.y, b.y),

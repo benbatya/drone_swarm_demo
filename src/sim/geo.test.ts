@@ -1,12 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { BASES } from './config'
+import { BASES, WORLD_H_M, WORLD_W_M } from './config'
 import {
   cellCenter,
   cellIdOf,
+  clampToWorld,
   distance,
   lngLatToMeters,
   metersToLngLat,
 } from './geo'
+
+describe('clampToWorld', () => {
+  it('clamps points into the world bounds', () => {
+    expect(clampToWorld({ x: -500, y: -20 })).toEqual({ x: 0, y: 0 })
+    expect(clampToWorld({ x: WORLD_W_M + 9999, y: WORLD_H_M + 9999 })).toEqual({
+      x: WORLD_W_M,
+      y: WORLD_H_M,
+    })
+    const inside = { x: 1000, y: 2000 }
+    expect(clampToWorld(inside)).toEqual(inside)
+  })
+})
 
 describe('geo projection', () => {
   it('round-trips lng/lat -> meters -> lng/lat within 10m', () => {

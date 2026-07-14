@@ -1,4 +1,4 @@
-import { BASES, WORLD_H_M, WORLD_W_M, type SimConfig } from './config'
+import { BASES, CELL_SIZE_M, WORLD_H_M, WORLD_W_M, type SimConfig } from './config'
 import { cellIdOf, distance, lngLatToMeters, type CellId, type Vec2 } from './geo'
 import type { Rng } from './rng'
 
@@ -24,7 +24,12 @@ export function stepIgnition(
   const n = rng.poisson(cfg.ignitionLambdaPerMin)
   let added = 0
   for (let i = 0; i < n; i++) {
-    const p: Vec2 = { x: rng.range(0, WORLD_W_M), y: rng.range(0, WORLD_H_M) }
+    // Sample a cell fully inside the world: the last partial cell would round a
+    // cell center just past the edge, so keep a one-cell margin.
+    const p: Vec2 = {
+      x: rng.range(0, WORLD_W_M - CELL_SIZE_M),
+      y: rng.range(0, WORLD_H_M - CELL_SIZE_M),
+    }
     const id = cellIdOf(p)
     if (fires.has(id)) continue
     let tooClose = false

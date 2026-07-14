@@ -3,7 +3,7 @@ import { LineLayer } from '@deck.gl/layers'
 import maplibregl, { type StyleSpecification } from 'maplibre-gl'
 import { useEffect, useRef } from 'react'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { WORLD_CENTER } from '../../sim/config'
+import { BBOX, WORLD_CENTER } from '../../sim/config'
 import type { TruthSnapshot } from '../../sim/snapshot'
 import { useRunner } from '../RunnerContext'
 import { useUIStore, type Tab } from '../store'
@@ -114,11 +114,14 @@ export function MapCanvas({ source }: { source: Tab }) {
     // Shift-drag to draw a scan rectangle (User Console only).
     let drawing = false
     let start: maplibregl.LngLat | null = null
+    // Clamp the drawn rectangle to the map bounds so scans stay on the map.
+    const clampLng = (v: number) => Math.min(Math.max(v, BBOX.west), BBOX.east)
+    const clampLat = (v: number) => Math.min(Math.max(v, BBOX.south), BBOX.north)
     const rectFrom = (a: maplibregl.LngLat, b: maplibregl.LngLat) => ({
-      west: Math.min(a.lng, b.lng),
-      east: Math.max(a.lng, b.lng),
-      south: Math.min(a.lat, b.lat),
-      north: Math.max(a.lat, b.lat),
+      west: clampLng(Math.min(a.lng, b.lng)),
+      east: clampLng(Math.max(a.lng, b.lng)),
+      south: clampLat(Math.min(a.lat, b.lat)),
+      north: clampLat(Math.max(a.lat, b.lat)),
     })
     map.on('mousedown', (e) => {
       if (sourceRef.current !== 'console' || !e.originalEvent.shiftKey) return
