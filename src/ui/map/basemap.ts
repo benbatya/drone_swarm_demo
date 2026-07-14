@@ -7,7 +7,7 @@ import {
 } from '@deck.gl/layers'
 import type { FeatureCollection } from 'geojson'
 import { BASES, BBOX } from '../../sim/config'
-import landData from './geo/land.json'
+import landData from '../../sim/land.json'
 import lakesData from './geo/lakes.json'
 import placesData from './geo/places.json'
 import riversData from './geo/rivers.json'

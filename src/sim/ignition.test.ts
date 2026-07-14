@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { BASES, WORLD_H_M, WORLD_W_M, makeConfig } from './config'
 import { cellCenter, distance, lngLatToMeters } from './geo'
 import { stepIgnition, type FireTruth } from './ignition'
+import { isOnLand } from './land'
 import { makeRng } from './rng'
 import type { CellId } from './geo'
 
@@ -36,6 +37,17 @@ describe('ignition', () => {
       expect(c.x).toBeLessThanOrEqual(WORLD_W_M)
       expect(c.y).toBeGreaterThanOrEqual(0)
       expect(c.y).toBeLessThanOrEqual(WORLD_H_M)
+    }
+  })
+
+  it('only ignites fires on land, never in the ocean', () => {
+    const cfg = makeConfig({ ignitionLambdaPerMin: 5 })
+    const rng = makeRng(13)
+    const fires = new Map<CellId, FireTruth>()
+    for (let t = 1; t <= 3000; t++) stepIgnition(rng, fires, t, cfg)
+    expect(fires.size).toBeGreaterThan(100)
+    for (const f of fires.values()) {
+      expect(isOnLand(cellCenter(f.cellId))).toBe(true)
     }
   })
 
