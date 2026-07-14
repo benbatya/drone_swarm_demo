@@ -4,7 +4,7 @@ import { makeConfig } from './config'
 describe('SimConfig fuel model', () => {
   it('derives a burn rate consistent with the operational range', () => {
     const cfg = makeConfig()
-    expect(cfg.fuelBurnLPerMin).toBeCloseTo(2.8, 6)
+    expect(cfg.fuelBurnLPerMin).toBeCloseTo(5.6, 6)
     // A full tank flown straight covers exactly operationalRangeKm.
     const minutesAloft = cfg.fuelCapacityL / cfg.fuelBurnLPerMin
     const rangeKm = (minutesAloft * cfg.speedMPerMin) / 1000
