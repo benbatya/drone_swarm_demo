@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { ConsoleDroneView, ConsoleView, FireView } from '../../sim/snapshot'
 import { useUIStore } from '../store'
 import { useSimSnapshot } from '../useSimSnapshot'
@@ -13,9 +14,11 @@ const STALE_LABEL: Record<ConsoleDroneView['staleness'], string> = {
 
 function ConsoleFleetList({
   cv,
+  selectedId,
   onSelect,
 }: {
   cv: ConsoleView
+  selectedId: string | null
   onSelect: (id: string) => void
 }) {
   return (
@@ -24,7 +27,7 @@ function ConsoleFleetList({
         <button
           key={d.id}
           type="button"
-          className="fleet-row"
+          className={'fleet-row' + (d.id === selectedId ? ' selected' : '')}
           onClick={() => onSelect(d.id)}
         >
           <span className={`dot stale-${d.staleness}`} />
@@ -39,19 +42,10 @@ function ConsoleFleetList({
   )
 }
 
-function ConsoleDroneDetail({
-  d,
-  onBack,
-}: {
-  d: ConsoleDroneView
-  onBack: () => void
-}) {
+function ConsoleDroneDetail({ d }: { d: ConsoleDroneView }) {
   return (
     <div className="panel">
       <div className="panel-head">
-        <button type="button" className="link" onClick={onBack}>
-          ← fleet
-        </button>
         <span className="panel-title">{d.id}</span>
       </div>
       <Row
@@ -80,36 +74,20 @@ function ConsoleDroneDetail({
       <Row
         k="Pending"
         v={
-          d.pendingCount === 0
-            ? '—'
-            : `${d.downloadedCount}/${d.pendingCount} downloaded`
+          d.pendingCount === 0 ? '—' : `${d.downloadedCount}/${d.pendingCount} downloaded`
         }
       />
     </div>
   )
 }
 
-function ConsoleFireDetail({
-  f,
-  tick,
-  onBack,
-}: {
-  f: FireView
-  tick: number
-  onBack: () => void
-}) {
+function ConsoleFireDetail({ f, tick }: { f: FireView; tick: number }) {
   return (
     <div className="panel">
       <div className="panel-head">
-        <button type="button" className="link" onClick={onBack}>
-          ← fleet
-        </button>
         <span className="panel-title">Fire #{f.cellId}</span>
       </div>
-      <Row
-        k="Position"
-        v={`${f.position[1].toFixed(3)}, ${f.position[0].toFixed(3)}`}
-      />
+      <Row k="Position" v={`${f.position[1].toFixed(3)}, ${f.position[0].toFixed(3)}`} />
       <Row k="First reported" v={`t = ${f.ignitedAt}`} />
       <Row k="Known for" v={`${Math.max(0, tick - f.ignitedAt).toLocaleString()} min`} />
     </div>
@@ -123,31 +101,57 @@ export function ConsolePanel() {
   const selectDrone = useUIStore((s) => s.selectDrone)
   const cv = snap.console
 
-  let detail
-  if (selection?.kind === 'drone') {
-    const d = cv.drones.find((x) => x.id === selection.id)
-    if (d) detail = <ConsoleDroneDetail d={d} onBack={clear} />
-  } else if (selection?.kind === 'fire') {
-    const f = cv.fires.find((x) => x.cellId === selection.cellId)
-    if (f) detail = <ConsoleFireDetail f={f} tick={snap.tick} onBack={clear} />
-  }
+  // The selected drone drives the state panel, the directive composer, and the
+  // map's scan-region overlay. Persisted so it survives a fire-click (extinguish
+  // targets a fire while keeping the same drone).
+  const [targetId, setTargetId] = useState<string | null>(null)
+  useEffect(() => {
+    if (selection?.kind === 'drone') setTargetId(selection.id)
+  }, [selection])
+
+  const targetDrone = targetId ? cv.drones.find((x) => x.id === targetId) : undefined
+  const fire =
+    selection?.kind === 'fire' ? cv.fires.find((x) => x.cellId === selection.cellId) : undefined
 
   const knownFires = cv.fires.length
   const contactable = cv.drones.filter((d) => d.staleness === 'fresh').length
 
+  const clearTarget = () => {
+    setTargetId(null)
+    clear()
+  }
+
   return (
     <div className="console-panel">
-      <DirectiveComposer />
-      <hr className="sep" />
-      {detail ?? (
+      <div className="panel-head">
+        <span className="panel-title">
+          Console · {contactable}/{cv.drones.length} in contact
+        </span>
+        {targetId && (
+          <button type="button" className="link" onClick={clearTarget}>
+            clear
+          </button>
+        )}
+      </div>
+      <ConsoleFleetList cv={cv} selectedId={targetId} onSelect={selectDrone} />
+      <div className="panel-stats">
+        <Row k="Believed fires" v={`${knownFires}`} />
+      </div>
+
+      {targetDrone ? (
         <>
-          <div className="panel-title">
-            Console · {contactable}/{cv.drones.length} in contact
-          </div>
-          <ConsoleFleetList cv={cv} onSelect={selectDrone} />
-          <div className="panel-stats">
-            <Row k="Believed fires" v={`${knownFires}`} />
-          </div>
+          <hr className="sep" />
+          <ConsoleDroneDetail d={targetDrone} />
+          <DirectiveComposer target={targetDrone.id} />
+        </>
+      ) : (
+        <div className="hint">Select a drone to view its state and issue directives.</div>
+      )}
+
+      {fire && (
+        <>
+          <hr className="sep" />
+          <ConsoleFireDetail f={fire} tick={snap.tick} />
         </>
       )}
     </div>

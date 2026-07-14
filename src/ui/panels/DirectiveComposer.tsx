@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { BASES } from '../../sim/config'
 import { lngLatToMeters } from '../../sim/geo'
 import type { Directive, RectM } from '../../sim/directives/types'
 import { useRunner } from '../RunnerContext'
 import { useUIStore, type DraftRect } from '../store'
-import { useSimSnapshot } from '../useSimSnapshot'
 
 let idSeq = 0
 const nextId = () => `op-${++idSeq}`
@@ -22,22 +21,19 @@ function draftToRectM(r: DraftRect): RectM {
 
 type Kind = 'scan' | 'extinguish' | 'rtb'
 
-export function DirectiveComposer() {
+// Directive composer for a specific drone (`target`). Rendered inside the
+// selected-drone section of the console — the drone is chosen by the fleet list
+// or the map, so this no longer carries its own drone picker.
+export function DirectiveComposer({ target }: { target: string }) {
   const runner = useRunner()
-  const snap = useSimSnapshot()
   const selection = useUIStore((s) => s.selection)
   const draftRect = useUIStore((s) => s.draftRect)
   const setDraftRect = useUIStore((s) => s.setDraftRect)
 
-  const [target, setTarget] = useState(snap.console.drones[0]?.id ?? '')
   const [kind, setKind] = useState<Kind>('scan')
   const [importance, setImportance] = useState(5)
   const [durationMin, setDurationMin] = useState(240)
   const [baseId, setBaseId] = useState(BASES[0].id)
-
-  useEffect(() => {
-    if (selection?.kind === 'drone') setTarget(selection.id)
-  }, [selection])
 
   const fireCell = selection?.kind === 'fire' ? selection.cellId : null
   const canIssue =
@@ -61,17 +57,7 @@ export function DirectiveComposer() {
 
   return (
     <div className="composer">
-      <div className="panel-title">Issue directive</div>
-      <label className="field">
-        <span>Drone</span>
-        <select value={target} onChange={(e) => setTarget(e.target.value)}>
-          {snap.console.drones.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.id}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="panel-title">Issue directive → {target}</div>
 
       <div className="seg">
         {(['scan', 'extinguish', 'rtb'] as Kind[]).map((k) => (
