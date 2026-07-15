@@ -3,7 +3,7 @@ import { PathLayer, PolygonLayer } from '@deck.gl/layers'
 import { BASES, makeConfig } from '../../sim/config'
 import { buildLawnmower, sweepSpacingM } from '../../sim/directives/scanExec'
 import { parseDroneId, scanSectorFor } from '../../sim/drones/scanSectors'
-import type { ScanOrientation } from '../../sim/directives/types'
+import type { RectM, ScanOrientation } from '../../sim/directives/types'
 import { lngLatToMeters, metersToLngLat } from '../../sim/geo'
 import { hsvToRgb, type RGB } from './colors'
 
@@ -30,6 +30,12 @@ export interface ScanDrone {
    * sector's default sweep (e.g. a never-contacted console drone).
    */
   scanOrientation?: ScanOrientation | null
+  /**
+   * Current standing scan sector. Overrides the fixed `scanSectorFor(id)` sector
+   * (an operator can redefine it). Omit / null to fall back to the default
+   * (e.g. a never-contacted console drone).
+   */
+  scanRect?: RectM | null
 }
 interface ZoneDatum {
   hue: number
@@ -38,7 +44,7 @@ interface ZoneDatum {
 }
 
 function zoneFor(d: ScanDrone): ZoneDatum | null {
-  const rect = scanSectorFor(d.id)
+  const rect = d.scanRect ?? scanSectorFor(d.id)
   if (!rect) return null
   const ring: LL[] = [
     toLL(rect.minX, rect.minY),

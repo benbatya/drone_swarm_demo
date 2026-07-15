@@ -23,6 +23,13 @@ function draftToRectM(r: DraftRect): RectM {
 
 type Kind = 'scan' | 'extinguish' | 'rtb'
 
+// Segment labels — "scan" is really "redefine the drone's standing scan zone".
+const KIND_LABEL: Record<Kind, string> = {
+  scan: 'scan zone',
+  extinguish: 'extinguish',
+  rtb: 'rtb',
+}
+
 // Directive composer for a specific drone (`target`). Rendered inside the
 // selected-drone section of the console — the drone is chosen by the fleet list
 // or the map, so this no longer carries its own drone picker.
@@ -34,7 +41,6 @@ export function DirectiveComposer({ target }: { target: string }) {
 
   const [kind, setKind] = useState<Kind>('scan')
   const [importance, setImportance] = useState(5)
-  const [durationMin, setDurationMin] = useState(240)
   const [baseId, setBaseId] = useState(BASES[0].id)
 
   const fireCell = selection?.kind === 'fire' ? selection.cellId : null
@@ -44,22 +50,25 @@ export function DirectiveComposer({ target }: { target: string }) {
 
   const issue = () => {
     if (!canIssue) return
-    const base = { id: nextId(), importance, issuedAt: 0 }
-    let dir: Directive
+    // "scan" persistently redefines the drone's standing scan sector (downloaded
+    // and adopted at the drone's next sync), rather than issuing a queued
+    // directive. The other kinds are ordinary pending directives.
     if (kind === 'scan') {
-      dir = { kind: 'scan', ...base, rect: draftToRectM(draftRect!), durationMin }
+      runner.setScanSector(target, draftToRectM(draftRect!))
       setDraftRect(null)
-    } else if (kind === 'extinguish') {
-      dir = { kind: 'extinguish', ...base, cellId: fireCell! }
-    } else {
-      dir = { kind: 'rtb', ...base, baseId }
+      return
     }
+    const base = { id: nextId(), importance, issuedAt: 0 }
+    const dir: Directive =
+      kind === 'extinguish'
+        ? { kind: 'extinguish', ...base, cellId: fireCell! }
+        : { kind: 'rtb', ...base, baseId }
     runner.issueDirective(target, dir)
   }
 
   return (
     <div className="composer">
-      <div className="panel-title">Issue directive → {target}</div>
+      <div className="panel-title">Directive → {target}</div>
 
       <div className="seg">
         {(['scan', 'extinguish', 'rtb'] as Kind[]).map((k) => (
@@ -69,7 +78,7 @@ export function DirectiveComposer({ target }: { target: string }) {
             className={'seg-btn' + (kind === k ? ' active' : '')}
             onClick={() => setKind(k)}
           >
-            {k}
+            {KIND_LABEL[k]}
           </button>
         ))}
       </div>
@@ -77,18 +86,20 @@ export function DirectiveComposer({ target }: { target: string }) {
       {kind === 'scan' && (
         <>
           <div className={'hint' + (draftRect ? ' ok' : '')}>
-            {draftRect ? 'Scan area captured ✓' : 'Shift-drag on the map to set the scan area'}
+            {draftRect
+              ? 'New scan zone captured ✓'
+              : "Shift-drag on the map to set this drone's scan zone"}
           </div>
-          <label className="field">
-            <span>Duration (min)</span>
-            <input
-              type="number"
-              min={30}
-              step={30}
-              value={durationMin}
-              onChange={(e) => setDurationMin(Number(e.target.value))}
-            />
-          </label>
+          <button
+            type="button"
+            className="issue-btn"
+            onClick={() => {
+              runner.setScanSector(target, null)
+              setDraftRect(null)
+            }}
+          >
+            Restore default scan zone
+          </button>
         </>
       )}
 
@@ -111,19 +122,21 @@ export function DirectiveComposer({ target }: { target: string }) {
         </label>
       )}
 
-      <label className="field">
-        <span>Importance {importance}</span>
-        <input
-          type="range"
-          min={1}
-          max={10}
-          value={importance}
-          onChange={(e) => setImportance(Number(e.target.value))}
-        />
-      </label>
+      {kind !== 'scan' && (
+        <label className="field">
+          <span>Importance {importance}</span>
+          <input
+            type="range"
+            min={1}
+            max={10}
+            value={importance}
+            onChange={(e) => setImportance(Number(e.target.value))}
+          />
+        </label>
+      )}
 
       <button type="button" className="issue-btn" disabled={!canIssue} onClick={issue}>
-        Issue directive
+        {kind === 'scan' ? 'Set scan zone' : 'Issue directive'}
       </button>
     </div>
   )

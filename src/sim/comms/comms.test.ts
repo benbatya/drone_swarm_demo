@@ -8,7 +8,10 @@ import {
   pointAtDistance,
   sweepSpacingM,
 } from '../directives/scanExec'
+import { addPendingSector } from '../belief/consoleBelief'
+import { defaultSectorFor } from '../drones/drone'
 import { scanSectorFor } from '../drones/scanSectors'
+import type { RectM } from '../directives/types'
 import { lngLatToMeters } from '../geo'
 import { makeRng } from '../rng'
 import { buildSnapshot } from '../snapshot'
@@ -219,6 +222,105 @@ describe('extinguished-fire reporting', () => {
   })
 })
 
+describe('operator scan-sector redefinition', () => {
+  // A rectangle plainly different from the drone's default sector.
+  const customRect = (d0: RectM): RectM => ({
+    minX: d0.minX + 40_000,
+    minY: d0.minY + 40_000,
+    maxX: d0.minX + 80_000,
+    maxY: d0.minY + 80_000,
+  })
+
+  it('downloads a new sector at sync: updates patrolRect and rebuilds the sweep', () => {
+    const w = createWorld(cfg0())
+    const d = w.drones[0]
+    const def = defaultSectorFor(d.id, d.homePos, w.cfg)
+    const rect = customRect(def)
+    const beforePatrol = d.autoPatrol
+
+    addPendingSector(w.console, d.id, rect, 0)
+    d.comms.darkWindows = [] // always connected
+    d.comms.nextSyncAt = 1
+    d.comms.lastSyncAt = -Infinity
+    w.tick = 5
+
+    // Before the sync the console surfaces the request as a pending sector.
+    const pre = buildSnapshot(w, { running: true, speed: 1, version: 1, seasonComplete: false })
+    expect(pre.console.drones.find((dv) => dv.id === d.id)!.pendingSectorRect).toEqual(rect)
+
+    stepSync(w)
+
+    // Truth adopted the new sector and rebuilt the standing patrol from it.
+    expect(d.patrolRect).toEqual(rect)
+    expect(d.autoPatrol).not.toBe(beforePatrol)
+    expect(d.autoPatrol.rect).toEqual(rect)
+    // Downloaded exactly once (won't re-apply on the next sync).
+    expect(w.console.drones.get(d.id)!.pendingSector!.downloadedAt).toBe(5)
+
+    // God Mode (ground truth) shows the new sector immediately.
+    const snap1 = buildSnapshot(w, { running: true, speed: 1, version: 1, seasonComplete: false })
+    expect(snap1.drones.find((dv) => dv.id === d.id)!.scanRect).toEqual(rect)
+    // The pending rectangle clears the instant the drone downloads the change.
+    expect(snap1.console.drones.find((dv) => dv.id === d.id)!.pendingSectorRect).toBeNull()
+    // The console lags one sync: telemetry is uploaded before the sector is
+    // downloaded, so this sync still reports the pre-change (default) sector —
+    // the same belief-lag idiom as a directive's queueLen.
+    expect(snap1.console.drones.find((dv) => dv.id === d.id)!.scanRect).toEqual(def)
+
+    // On the next successful sync the drone reports its now-current sector.
+    d.comms.nextSyncAt = w.tick + 1
+    w.tick += 10
+    stepSync(w)
+    const snap2 = buildSnapshot(w, { running: true, speed: 1, version: 1, seasonComplete: false })
+    expect(snap2.console.drones.find((dv) => dv.id === d.id)!.scanRect).toEqual(rect)
+  })
+
+  it('does not apply the new sector while the drone is blacked out', () => {
+    const w = createWorld(cfg0())
+    const d = w.drones[0]
+    const def = defaultSectorFor(d.id, d.homePos, w.cfg)
+    const rect = customRect(def)
+
+    addPendingSector(w.console, d.id, rect, 0)
+    d.comms.darkWindows = alwaysDark()
+    d.comms.cursor = 0
+    d.comms.nextSyncAt = 1
+    d.comms.lastSyncAt = -Infinity
+    w.tick = 5
+    stepSync(w)
+
+    // No contact → sector unchanged, request still pending for the next window.
+    expect(d.patrolRect).toEqual(def)
+    expect(w.console.drones.get(d.id)!.pendingSector!.downloadedAt).toBeNull()
+    // The bright pending rectangle persists until the link returns.
+    const snap = buildSnapshot(w, { running: true, speed: 1, version: 1, seasonComplete: false })
+    expect(snap.console.drones.find((dv) => dv.id === d.id)!.pendingSectorRect).toEqual(rect)
+  })
+
+  it('restores the default sector when the operator clears the change (rect = null)', () => {
+    const w = createWorld(cfg0())
+    const d = w.drones[0]
+    const def = defaultSectorFor(d.id, d.homePos, w.cfg)
+    const rect = customRect(def)
+    d.comms.darkWindows = [] // always connected
+
+    // First adopt a custom sector...
+    addPendingSector(w.console, d.id, rect, 0)
+    d.comms.nextSyncAt = 1
+    d.comms.lastSyncAt = -Infinity
+    w.tick = 5
+    stepSync(w)
+    expect(d.patrolRect).toEqual(rect)
+
+    // ...then clear it back to the default.
+    addPendingSector(w.console, d.id, null, 6)
+    d.comms.nextSyncAt = w.tick + 1
+    w.tick += 10
+    stepSync(w)
+    expect(d.patrolRect).toEqual(def)
+  })
+})
+
 describe('console staleness derivation', () => {
   function snapWithAge(age: number): GroundTruth {
     const w = createWorld(cfg0())
@@ -234,6 +336,7 @@ describe('console staleness derivation', () => {
       queueLen: 0,
       scanning: false,
       scanOrientation: 'horizontal',
+      patrolRect: scanSectorFor('redding-1')!,
       extinguishedTotal: 0,
     }
     w.tick = 1000
@@ -275,6 +378,7 @@ describe('sweep-following dead reckoning under blackout', () => {
       queueLen: 0,
       scanning,
       scanOrientation: 'horizontal',
+      patrolRect: scanSectorFor('redding-1')!,
       extinguishedTotal: 0,
     }
     w.tick = 1000
@@ -315,6 +419,7 @@ describe('sweep-following dead reckoning under blackout', () => {
       queueLen: 0,
       scanning: true,
       scanOrientation: 'horizontal',
+      patrolRect: scanSectorFor('redding-1')!,
       extinguishedTotal: 0,
     }
     const age = 40
@@ -377,6 +482,7 @@ describe('sweep-following dead reckoning under blackout', () => {
       queueLen: 0,
       scanning: true,
       scanOrientation: 'horizontal',
+      patrolRect: scanSectorFor('redding-1')!,
       extinguishedTotal: 0,
     }
     const age = 5 // short gap: the ghost stays on this leg

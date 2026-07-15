@@ -1,7 +1,12 @@
 import type { SimConfig } from '../config'
 import type { ConsoleBelief, ConsoleDroneRecord } from '../belief/consoleBelief'
 import { enqueue } from '../directives/queue'
-import { isScanning, type DroneTruth } from '../drones/drone'
+import {
+  defaultSectorFor,
+  isScanning,
+  setPatrolSector,
+  type DroneTruth,
+} from '../drones/drone'
 import type { GroundTruth } from '../world'
 import { isDarkAt } from './blackout'
 import { mergeFire } from './merge'
@@ -19,6 +24,7 @@ function uploadTelemetry(rec: ConsoleDroneRecord, d: DroneTruth, now: number): v
     queueLen: d.queue.length,
     scanning: isScanning(d),
     scanOrientation: d.scanOrientation,
+    patrolRect: { ...d.patrolRect },
     extinguishedTotal: d.extinguishedTotal,
   }
 }
@@ -58,6 +64,14 @@ function download(rec: ConsoleDroneRecord, d: DroneTruth, now: number, cfg: SimC
       enqueue(d, p.directive, cfg)
       p.downloadedAt = now
     }
+  }
+  // Operator sector redefinition: apply the latest pending sector (null = restore
+  // default) and rebuild the standing patrol sweep. Comms-gated like directives.
+  const ps = rec.pendingSector
+  if (ps && ps.downloadedAt == null) {
+    const rect = ps.rect ?? defaultSectorFor(d.id, d.homePos, cfg)
+    setPatrolSector(d, rect, cfg)
+    ps.downloadedAt = now
   }
 }
 

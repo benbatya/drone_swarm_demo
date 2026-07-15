@@ -46,6 +46,9 @@ export interface DroneTruth {
   override: RtbExec | null
   forcedRtb: boolean
 
+  /** Current standing scan sector — operator-redefinable, defaults to the fixed
+   * per-drone sector. autoPatrol sweeps this rectangle. */
+  patrolRect: RectM
   /** Standing home-sector patrol; idle fallback when no known in-range fire. */
   autoPatrol: ScanExec
   /** Self-assigned idle extinguish, re-evaluated each tick. */
@@ -81,6 +84,17 @@ export function homeSectorRect(home: Vec2, sideKm: number): RectM {
   return { minX: min.x, minY: min.y, maxX: max.x, maxY: max.y }
 }
 
+/** The drone's built-in default scan sector (fixed per-drone; home-box fallback). */
+export function defaultSectorFor(id: string, home: Vec2, cfg: SimConfig): RectM {
+  return scanSectorFor(id) ?? homeSectorRect(home, cfg.patrolBoxKm)
+}
+
+/** Redefine a drone's standing scan sector and rebuild its patrol sweep. */
+export function setPatrolSector(d: DroneTruth, rect: RectM, cfg: SimConfig): void {
+  d.patrolRect = rect
+  d.autoPatrol = makeScanExec(rect, Infinity, d.homePos, cfg, d.scanOrientation)
+}
+
 /** Build the initial fleet: `dronesPerBase` drones at each base, full tanks. */
 export function createFleet(cfg: SimConfig): DroneTruth[] {
   const drones: DroneTruth[] = []
@@ -92,8 +106,8 @@ export function createFleet(cfg: SimConfig): DroneTruth[] {
     const home = lngLatToMeters(base.lng, base.lat)
     for (let i = 0; i < cfg.dronesPerBase; i++) {
       const id = `${base.id}-${i + 1}`
-      // Fixed assigned scan sector; fall back to a home box for exotic fleets.
-      const rect = scanSectorFor(id) ?? homeSectorRect(home, cfg.patrolBoxKm)
+      // Assigned scan sector (fixed per-drone; home-box fallback for exotic fleets).
+      const rect = defaultSectorFor(id, home, cfg)
       drones.push({
         id,
         homeBaseId: base.id,
@@ -114,6 +128,7 @@ export function createFleet(cfg: SimConfig): DroneTruth[] {
         forcedRtb: false,
         scanOrientation: 'horizontal',
         scanFrac: 0,
+        patrolRect: rect,
         autoPatrol: makeScanExec(rect, Infinity, home, cfg, 'horizontal'),
         autoExec: null,
         abortedIds: [],
