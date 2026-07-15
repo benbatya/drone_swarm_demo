@@ -30,6 +30,31 @@ interface UIState {
   /** Show every drone's scan zone (not just the selected one) — both tabs. */
   showAllScans: boolean
   toggleAllScans: () => void
+  /** About dialog visibility for this session (opens on load iff aboutByDefault). */
+  showAbout: boolean
+  setShowAbout: (v: boolean) => void
+  /** Persisted preference: show the About dialog on page load (localStorage). */
+  aboutByDefault: boolean
+  setAboutByDefault: (v: boolean) => void
+}
+
+const ABOUT_PREF_KEY = 'fireSeason.showAboutByDefault'
+
+/** Read the persisted "show About on load" preference (default true). */
+function readAboutByDefault(): boolean {
+  try {
+    return localStorage.getItem(ABOUT_PREF_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
+
+function writeAboutByDefault(v: boolean): void {
+  try {
+    localStorage.setItem(ABOUT_PREF_KEY, String(v))
+  } catch {
+    // Ignore storage failures (private mode / disabled) — preference just won't persist.
+  }
 }
 
 // Local, console-side UI state. The two tabs share one view component and
@@ -47,4 +72,12 @@ export const useUIStore = create<UIState>((set) => ({
   toggleHillshade: () => set((s) => ({ showHillshade: !s.showHillshade })),
   showAllScans: true,
   toggleAllScans: () => set((s) => ({ showAllScans: !s.showAllScans })),
+  // Open the About dialog on load only if the persisted preference says so.
+  showAbout: readAboutByDefault(),
+  setShowAbout: (v) => set({ showAbout: v }),
+  aboutByDefault: readAboutByDefault(),
+  setAboutByDefault: (v) => {
+    writeAboutByDefault(v)
+    set({ aboutByDefault: v })
+  },
 }))
