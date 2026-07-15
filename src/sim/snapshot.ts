@@ -7,6 +7,7 @@ import type { DroneStatus, DroneTruth } from './drones/drone'
 import { scanSectorFor } from './drones/scanSectors'
 import {
   buildLawnmower,
+  headingAtDistance,
   nearestArcLength,
   pathLength,
   pointAtDistance,
@@ -202,6 +203,10 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
     let ghostX = rep.pos.x
     let ghostY = rep.pos.y
     let uncertaintyRadiusM = 0
+    // Ghost orientation: for a straight transit the last-reported heading is
+    // already correct, but a scanning drone turns as it sweeps, so we follow the
+    // reconstructed lawnmower's direction (below) rather than freezing it.
+    let ghostHeading = rep.heading
     if (rep.status === 'airborne') {
       const dist = cfg.speedMPerMin * age
       uncertaintyRadiusM = cfg.speedMPerMin * age * 0.3
@@ -221,6 +226,8 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
           const p = pointAtDistance(path, s)
           ghostX = p.x
           ghostY = p.y
+          // Orientation follows the sweep's local direction at the ghost point.
+          ghostHeading = headingAtDistance(path, s)
         } else {
           ghostX = rep.pos.x + Math.sin(rep.heading) * dist
           ghostY = rep.pos.y + Math.cos(rep.heading) * dist
@@ -241,7 +248,7 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
       lastContactAt: rec.lastContactAt,
       contactAgeMin: age,
       reportedPosition: [reportedLL.lng, reportedLL.lat],
-      heading: rep.heading,
+      heading: ghostHeading,
       ghostPosition: [ghostLL.lng, ghostLL.lat],
       uncertaintyRadiusM,
       status: rep.status,
