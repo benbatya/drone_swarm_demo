@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { makeConfig } from '../config'
 import type { Vec2 } from '../geo'
-import { buildLawnmower, makeScanExec, stepScan, sweepSpacingM } from './scanExec'
+import {
+  buildLawnmower,
+  headingAtDistance,
+  makeScanExec,
+  stepScan,
+  sweepSpacingM,
+} from './scanExec'
 import type { DroneTruth } from '../drones/drone'
 import type { GroundTruth } from '../world'
 import type { RectM } from './types'
@@ -86,5 +92,34 @@ describe('lawnmower coverage', () => {
     const v = buildLawnmower(rect, { x: 0, y: 0 }, SPACING, 'vertical')
     expect(v[0].x).toBe(v[1].x)
     expect(v[0].y).not.toBe(v[1].y)
+  })
+})
+
+describe('headingAtDistance', () => {
+  // Heading convention: x = sin(h), y = cos(h) ⇒ east = atan2(1,0) = +π/2,
+  // north = atan2(0,1) = 0. An L-shaped path: 100 m east, then 100 m north.
+  const path: Vec2[] = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 }, // east leg
+    { x: 100, y: 100 }, // north leg
+  ]
+
+  it('returns the travel direction of the segment at arc-length s', () => {
+    expect(headingAtDistance(path, 50)).toBeCloseTo(Math.PI / 2) // mid east leg
+    expect(headingAtDistance(path, 150)).toBeCloseTo(0) // mid north leg
+  })
+
+  it('clamps like pointAtDistance at both ends', () => {
+    expect(headingAtDistance(path, -10)).toBeCloseTo(Math.PI / 2) // before start → first seg
+    expect(headingAtDistance(path, 999)).toBeCloseTo(0) // past end → last seg
+  })
+
+  it('turns along a real horizontal lawnmower leg', () => {
+    const rect: RectM = { minX: 0, minY: 0, maxX: 300_000, maxY: 220_000 }
+    const wp = buildLawnmower(rect, { x: 0, y: 0 }, SPACING, 'horizontal')
+    // The first leg runs along x, so the heading is horizontal (|cos|≈0, |sin|≈1).
+    const h = headingAtDistance(wp, 1000)
+    expect(Math.abs(Math.cos(h))).toBeLessThan(1e-6)
+    expect(Math.abs(Math.sin(h))).toBeCloseTo(1)
   })
 })

@@ -99,6 +99,28 @@ export function nearestArcLength(pts: Vec2[], p: Vec2): number {
   return bestS
 }
 
+/**
+ * Heading of the polyline's travel direction at arc-length `s`, in the sim's
+ * heading convention (x = sin(h), y = cos(h) ⇒ h = atan2(dx, dy)). Lets the
+ * console dead-reckon a scanning drone's orientation ALONG its sweep during a
+ * blackout instead of freezing it at the last reported heading. Clamps like
+ * pointAtDistance: s ≤ 0 → first segment, s ≥ length → last segment.
+ */
+export function headingAtDistance(pts: Vec2[], s: number): number {
+  if (pts.length < 2) return 0
+  let acc = 0
+  let last = 1
+  for (let i = 1; i < pts.length; i++) {
+    const seg = distance(pts[i - 1], pts[i])
+    if (seg > 0) {
+      last = i
+      if (acc + seg >= s) return Math.atan2(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y)
+    }
+    acc += seg
+  }
+  return Math.atan2(pts[last].x - pts[last - 1].x, pts[last].y - pts[last - 1].y)
+}
+
 /** Fraction (0..1) of the current sweep pass the drone has covered. */
 function passFrac(pts: Vec2[], pos: Vec2): number {
   const len = pathLength(pts)

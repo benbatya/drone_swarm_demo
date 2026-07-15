@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { makeConfig } from '../config'
+import {
+  buildLawnmower,
+  headingAtDistance,
+  nearestArcLength,
+  pathLength,
+  sweepSpacingM,
+} from '../directives/scanExec'
 import { scanSectorFor } from '../drones/scanSectors'
 import { lngLatToMeters } from '../geo'
 import { makeRng } from '../rng'
@@ -231,5 +238,43 @@ describe('sweep-following dead reckoning under blackout', () => {
     expect(inSector(straight)).toBe(false)
     // And the two estimates genuinely differ.
     expect(Math.hypot(sweep.x - straight.x, sweep.y - straight.y)).toBeGreaterThan(1000)
+  })
+
+  it('orients the scanning ghost along the sweep, not the frozen reported heading', () => {
+    const w = createWorld(cfg0())
+    const rect = scanSectorFor('redding-1')!
+    const rec = w.console.drones.get('redding-1')!
+    const pos = { x: (rect.minX + rect.maxX) / 2, y: (rect.minY + rect.maxY) / 2 }
+    // Report an arbitrary heading that is NOT a sweep direction (sweeps are axis-aligned).
+    rec.reported = {
+      pos,
+      heading: 0.5,
+      fuelL: 500,
+      retardant: 5,
+      status: 'airborne',
+      forcedRtb: false,
+      currentDirectiveKind: null,
+      queueLen: 0,
+      scanning: true,
+      scanOrientation: 'horizontal',
+    }
+    const age = 40
+    w.tick = 1000
+    rec.lastContactAt = 1000 - age
+    const view = buildSnapshot(w, {
+      running: true,
+      speed: 1,
+      version: 1,
+      seasonComplete: false,
+    }).console.drones.find((d) => d.id === 'redding-1')!
+
+    // Reconstruct the expected sweep tangent at the dead-reckoned arc-length.
+    const cfg = w.cfg
+    const path = buildLawnmower(rect, pos, sweepSpacingM(cfg), 'horizontal')
+    const s = (nearestArcLength(path, pos) + cfg.speedMPerMin * age) % pathLength(path)
+    // Heading follows the reconstructed sweep direction...
+    expect(view.heading).toBeCloseTo(headingAtDistance(path, s), 5)
+    // ...and is no longer frozen at the reported heading.
+    expect(view.heading).not.toBeCloseTo(0.5, 2)
   })
 })
