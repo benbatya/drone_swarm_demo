@@ -258,7 +258,10 @@ drone's *heading* along its sweep).
   `consoleLayers.ts` (belief: last-confirmed hollow ring, ghost dot, reported→ghost
   dead-reckon line, sweep-extrapolated heading tick, growing uncertainty circle,
   color darkened by staleness) · `scanZones.ts` (fixed sector polygons + lawnmower
-  hatches). `colors.ts`: `staleValue(stalenessFrac)=1−stalenessFrac` (the inverse
+  hatches; the hatches follow each drone's **current sweep orientation** and flip
+  H↔V with it — God Mode off the live `scanOrientation`, the console off the last
+  *reported* one, falling back to the sector's default sweep for a never-contacted
+  drone). `colors.ts`: `staleValue(stalenessFrac)=1−stalenessFrac` (the inverse
   of the sim's `stalenessFrac` — see §7).
 - **Panels**: `GodPanel` (ConfigPanel + full fleet list + `DronePanelTruth` w/
   `BlackoutStrip` comms timeline + `FirePanel`). `ConsolePanel` (fleet w/ contact-age
