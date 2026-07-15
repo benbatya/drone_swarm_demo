@@ -312,4 +312,8 @@ GeoJSON) and `build:hillshade` (DEM tiles → `geo/hillshade.webp`).
   architecture changes.
 - **Drift from old plans to remember**: detection is **10 km** (not 50), fuel is
   **2000 L / 2.8 L·min⁻¹**, scan sectors are **fixed per-drone**, sync retry is a
-  **constant 3 min** (not halving), MISSING is **76 min**.
+  **constant 3 min** (not halving), MISSING is **76 min**. Console marker
+  brightness is now **one ramp**: `staleValue = 1 − stalenessFrac` off the sim's
+  single `stalenessFrac = min(age/76, 1)` — so marks blacken exactly at MISSING
+  (76 min), *not* the old fixed **/100** scale (`staleValue` no longer takes an
+  age or has its own denominator).
