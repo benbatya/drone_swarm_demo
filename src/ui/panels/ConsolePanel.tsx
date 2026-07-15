@@ -70,6 +70,9 @@ function ConsoleDroneDetail({ d }: { d: ConsoleDroneView }) {
       {d.status && <Row k="Reported status" v={d.status} />}
       {d.fuelL != null && <Row k="Reported fuel" v={`${Math.round(d.fuelL)} L`} />}
       {d.retardant != null && <Row k="Reported retardant" v={`${d.retardant}`} />}
+      {d.extinguishedCount != null && (
+        <Row k="Fires extinguished" v={`${d.extinguishedCount}`} />
+      )}
       {d.forcedRtb && <Row k="Override" v="forced RTB" warn />}
       <Row
         k="Believed directive"

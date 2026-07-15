@@ -1,7 +1,12 @@
 import type { Layer } from '@deck.gl/core'
 import { LineLayer, PolygonLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
 import { lngLatToMeters, metersToLngLat } from '../../sim/geo'
-import type { ConsoleDroneView, ConsoleView, FireView } from '../../sim/snapshot'
+import type {
+  ConsoleDroneView,
+  ConsoleView,
+  ExtinguishedFireView,
+  FireView,
+} from '../../sim/snapshot'
 import type { DraftRect } from '../store'
 import { hsvToRgb, staleValue } from './colors'
 
@@ -34,6 +39,25 @@ export function consoleLayers(cv: ConsoleView, opts: ConsoleLayerOpts): Layer[] 
   const layers: Layer[] = []
   const withPos = cv.drones.filter((d) => d.reportedPosition && d.ghostPosition)
   const withGhost = withPos.filter((d) => d.uncertaintyRadiusM > 0)
+
+  // Extinguished fires the console has been told about — tinted with the
+  // extinguishing drone's identity hue at half brightness (value 0.5, full
+  // saturation). Drawn beneath live fires so a re-ignition at the same cell
+  // sits on top.
+  layers.push(
+    new ScatterplotLayer<ExtinguishedFireView>({
+      id: 'console-extinguished',
+      data: cv.extinguishedFires,
+      getPosition: (d) => d.position,
+      getRadius: 4,
+      radiusUnits: 'pixels',
+      radiusMinPixels: 2.5,
+      getFillColor: (d) => {
+        const [r, g, b] = hsvToRgb(d.hue, 1, 0.5)
+        return [r, g, b, 210]
+      },
+    }),
+  )
 
   // Believed fires (console knowledge only).
   layers.push(

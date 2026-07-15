@@ -17,6 +17,8 @@ export interface ReportedState {
   scanning: boolean
   /** Sweep direction at last contact, to reconstruct the lawnmower path. */
   scanOrientation: ScanOrientation
+  /** Running total of fires the drone has extinguished, as of last contact. */
+  extinguishedTotal: number
 }
 
 export interface PendingDirective {
@@ -32,6 +34,13 @@ export interface ConsoleDroneRecord {
   pending: PendingDirective[]
 }
 
+/** A fire the console has been told a drone extinguished. */
+export interface ExtinguishedFire {
+  cellId: CellId
+  extinguishedAt: number
+  extinguishedBy: string
+}
+
 /**
  * The console's believed state — updated ONLY by the comms sync path and by
  * operator input (addPending). Never reads ground truth directly.
@@ -39,6 +48,8 @@ export interface ConsoleDroneRecord {
 export interface ConsoleBelief {
   drones: Map<string, ConsoleDroneRecord>
   fires: Map<CellId, KnownFire>
+  /** Cells drones have reported extinguishing (keyed by cell; latest report wins). */
+  extinguished: Map<CellId, ExtinguishedFire>
 }
 
 export function makeConsoleBelief(ids: string[]): ConsoleBelief {
@@ -46,7 +57,7 @@ export function makeConsoleBelief(ids: string[]): ConsoleBelief {
   for (const id of ids) {
     drones.set(id, { id, lastContactAt: null, reported: null, pending: [] })
   }
-  return { drones, fires: new Map() }
+  return { drones, fires: new Map(), extinguished: new Map() }
 }
 
 /** Operator input: queue a pending directive for a drone (downloaded at sync). */

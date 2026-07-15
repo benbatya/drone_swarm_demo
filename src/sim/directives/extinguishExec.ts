@@ -39,6 +39,10 @@ export function stepExtinguish(
     w.score.doused++
     d.retardant = Math.max(0, d.retardant - 1)
     markBeliefOut(d, exec.cellId, now)
+    // Log the extinguished cell to report to the console at the next sync, and
+    // bump the running total reported in telemetry.
+    d.dousedSinceSync.push({ cellId: exec.cellId, at: now })
+    d.extinguishedTotal++
     return 'done'
   }
   return 'running'

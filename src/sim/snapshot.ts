@@ -87,11 +87,22 @@ export interface ConsoleDroneView {
   queueLen: number
   pendingCount: number
   downloadedCount: number
+  /** Reported running total of fires extinguished, or null if never contacted. */
+  extinguishedCount: number | null
+}
+
+export interface ExtinguishedFireView {
+  cellId: CellId
+  position: [number, number]
+  extinguishedAt: number
+  /** Signature hue of the drone that extinguished it (its identity color). */
+  hue: number
 }
 
 export interface ConsoleView {
   drones: ConsoleDroneView[]
   fires: FireView[]
+  extinguishedFires: ExtinguishedFireView[]
 }
 
 export interface TruthSnapshot {
@@ -180,6 +191,7 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
         queueLen: 0,
         pendingCount,
         downloadedCount,
+        extinguishedCount: null,
       })
       continue
     }
@@ -275,6 +287,7 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
       queueLen: rep.queueLen,
       pendingCount,
       downloadedCount,
+      extinguishedCount: rep.extinguishedTotal,
     })
   }
 
@@ -286,7 +299,21 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
     fires.push({ cellId: kf.cellId, position: [ll.lng, ll.lat], ignitedAt: kf.firstSeenAt })
   }
 
-  return { drones, fires }
+  // Locations drones have reported extinguishing, tinted with the extinguishing
+  // drone's identity hue (rendered at half brightness by the console layer).
+  const extinguishedFires: ExtinguishedFireView[] = []
+  for (const e of w.console.extinguished.values()) {
+    const c = cellCenter(e.cellId)
+    const ll = metersToLngLat(c.x, c.y)
+    extinguishedFires.push({
+      cellId: e.cellId,
+      position: [ll.lng, ll.lat],
+      extinguishedAt: e.extinguishedAt,
+      hue: ((order.get(e.extinguishedBy) ?? 0) * 360) / fleetN,
+    })
+  }
+
+  return { drones, fires, extinguishedFires }
 }
 
 export function buildSnapshot(w: GroundTruth, meta: SnapshotMeta): TruthSnapshot {

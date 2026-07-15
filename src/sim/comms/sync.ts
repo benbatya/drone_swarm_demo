@@ -19,6 +19,7 @@ function uploadTelemetry(rec: ConsoleDroneRecord, d: DroneTruth, now: number): v
     queueLen: d.queue.length,
     scanning: isScanning(d),
     scanOrientation: d.scanOrientation,
+    extinguishedTotal: d.extinguishedTotal,
   }
 }
 
@@ -29,6 +30,18 @@ function uploadFires(cb: ConsoleBelief, d: DroneTruth, sinceTick: number): void 
   }
 }
 
+/** Upload the cells the drone extinguished since last sync into the console's
+ * extinguished-fire log (keyed by cell; the latest report wins). */
+function uploadDoused(cb: ConsoleBelief, d: DroneTruth): void {
+  for (const e of d.dousedSinceSync) {
+    cb.extinguished.set(e.cellId, {
+      cellId: e.cellId,
+      extinguishedAt: e.at,
+      extinguishedBy: d.id,
+    })
+  }
+}
+
 /** Prune pending directives the drone has since completed or aborted. */
 function reconcilePending(rec: ConsoleDroneRecord, d: DroneTruth): void {
   const live = new Set(d.queue.map((x) => x.id))
@@ -36,6 +49,7 @@ function reconcilePending(rec: ConsoleDroneRecord, d: DroneTruth): void {
     (p) => p.downloadedAt == null || live.has(p.directive.id),
   )
   d.abortedIds.length = 0 // reported and consumed
+  d.dousedSinceSync.length = 0 // reported and consumed
 }
 
 function download(rec: ConsoleDroneRecord, d: DroneTruth, now: number, cfg: SimConfig): void {
@@ -83,6 +97,7 @@ export function stepSync(w: GroundTruth): void {
     if (rec) {
       uploadTelemetry(rec, d, now)
       uploadFires(w.console, d, c.lastSyncAt)
+      uploadDoused(w.console, d)
       reconcilePending(rec, d)
       download(rec, d, now, cfg)
     }
