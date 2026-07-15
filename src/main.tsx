@@ -3,12 +3,16 @@ import { makeConfig } from './sim/config'
 import { SimRunner } from './sim/simRunner'
 import { App } from './ui/App'
 import { RunnerProvider } from './ui/RunnerContext'
+import { randomSeed } from './ui/randomSeed'
 import './index.css'
 
 // Construct the SimRunner OUTSIDE React and start it immediately, so the sim
 // loop and window.__SIM__ hook are live regardless of React's lifecycle.
 // No StrictMode: the map/deck overlay owns imperative GL resources.
-const runner = new SimRunner(makeConfig())
+// Seed randomly at boot so each page load starts a different fire season; the
+// sim stays deterministic given that seed (headless tests use the fixed default),
+// and God Mode can set an explicit seed to reproduce a run.
+const runner = new SimRunner(makeConfig({ seed: randomSeed() }))
 runner.start()
 
 const root = document.getElementById('root')
