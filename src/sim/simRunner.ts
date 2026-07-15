@@ -6,9 +6,9 @@ import {
   TICKS_PER_SEASON,
   type SimConfig,
 } from './config'
-import { addPending } from './belief/consoleBelief'
+import { addPending, addPendingSector } from './belief/consoleBelief'
 import type { DarkWindow } from './comms/blackout'
-import type { Directive } from './directives/types'
+import type { Directive, RectM } from './directives/types'
 import { makeRng, type Rng } from './rng'
 import { buildSnapshot, type TruthSnapshot } from './snapshot'
 import { createWorld, tickWorld, type GroundTruth } from './world'
@@ -178,6 +178,19 @@ export class SimRunner {
   issueDirective(droneId: string, directive: Directive): void {
     const now = this.world.tick
     addPending(this.world.console, droneId, { ...directive, issuedAt: now }, now)
+    this.frameSnapshot = this.build()
+    this.emitStore()
+    this.publishHook()
+  }
+
+  /**
+   * Operator input: persistently redefine a drone's standing scan sector (the
+   * console pushes; the drone adopts it at its next successful sync and reports
+   * it back). Pass `rect: null` to restore the drone's default sector.
+   */
+  setScanSector(droneId: string, rect: RectM | null): void {
+    const now = this.world.tick
+    addPendingSector(this.world.console, droneId, rect, now)
     this.frameSnapshot = this.build()
     this.emitStore()
     this.publishHook()

@@ -155,6 +155,41 @@ export function consoleLayers(cv: ConsoleView, opts: ConsoleLayerOpts): Layer[] 
     }),
   )
 
+  // Pending scan-zone redefinitions: the operator has submitted a new sector but
+  // the drone hasn't downloaded it yet. Draw it as a bright bounding rectangle in
+  // the drone's hue; it clears automatically once the drone adopts it at sync.
+  const pending = cv.drones
+    .filter((d) => d.pendingSectorRect)
+    .map((d) => {
+      const r = d.pendingSectorRect!
+      const c0 = metersToLngLat(r.minX, r.minY)
+      const c1 = metersToLngLat(r.maxX, r.maxY)
+      const ring: [number, number][] = [
+        [c0.lng, c0.lat],
+        [c1.lng, c0.lat],
+        [c1.lng, c1.lat],
+        [c0.lng, c1.lat],
+      ]
+      return { hue: d.hue, ring }
+    })
+  if (pending.length) {
+    layers.push(
+      new PolygonLayer<{ hue: number; ring: [number, number][] }>({
+        id: 'pending-scan-zone',
+        data: pending,
+        getPolygon: (d) => d.ring,
+        filled: true,
+        // Bright, near-white tint of the drone's hue so it clearly reads as an
+        // unconfirmed operator request, distinct from the confirmed zone overlay.
+        getFillColor: (d) => [...hsvToRgb(d.hue, 0.45, 1), 45],
+        stroked: true,
+        getLineColor: (d) => [...hsvToRgb(d.hue, 0.35, 1), 255],
+        lineWidthUnits: 'pixels',
+        getLineWidth: 3,
+      }),
+    )
+  }
+
   // In-progress scan rectangle (shift-drag).
   if (opts.draftRect) {
     const r = opts.draftRect

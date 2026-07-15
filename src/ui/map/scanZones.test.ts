@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { scanSectorFor } from '../../sim/drones/scanSectors'
+import type { RectM } from '../../sim/directives/types'
 import { scanZoneLayers, type ScanDrone } from './scanZones'
 
 const FLEET: ScanDrone[] = [
@@ -39,5 +41,27 @@ describe('scanZoneLayers', () => {
       return hatches.props.data[0].path as [number, number][]
     }
     expect(hatchPath('horizontal')).not.toEqual(hatchPath('vertical'))
+  })
+
+  it('honors an operator-redefined scanRect over the fixed default sector', () => {
+    const def = scanSectorFor('redding-1')!
+    // A distinct rectangle far from the default sector.
+    const custom: RectM = {
+      minX: def.minX + 50_000,
+      minY: def.minY + 50_000,
+      maxX: def.minX + 90_000,
+      maxY: def.minY + 90_000,
+    }
+    const ringOf = (d: ScanDrone) => {
+      const layers = scanZoneLayers([d], { selectedId: 'redding-1', showAll: false })
+      const zones = layers.find((l) => l.id === 'scan-zones')!
+      // @ts-expect-error deck.gl layer props at runtime
+      return zones.props.data[0].ring as [number, number][]
+    }
+    const defaultRing = ringOf({ id: 'redding-1', hue: 0 })
+    const customRing = ringOf({ id: 'redding-1', hue: 0, scanRect: custom })
+    expect(customRing).not.toEqual(defaultRing)
+    // A null scanRect falls back to the fixed default sector.
+    expect(ringOf({ id: 'redding-1', hue: 0, scanRect: null })).toEqual(defaultRing)
   })
 })

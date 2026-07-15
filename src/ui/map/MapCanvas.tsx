@@ -52,6 +52,10 @@ export function MapCanvas({ source }: { source: Tab }) {
       zoom: 5.4,
       attributionControl: false,
       dragRotate: false,
+      // Shift-drag is our scan-zone gesture; disable MapLibre's built-in
+      // shift-drag box zoom so completing a drag sets the sector instead of
+      // zooming the view into the drawn rectangle.
+      boxZoom: false,
     })
     const overlay = new MapboxOverlay({ interleaved: true, layers: [] })
     map.addControl(overlay)

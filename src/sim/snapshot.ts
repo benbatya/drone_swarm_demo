@@ -13,7 +13,7 @@ import {
   pointAtDistance,
   sweepSpacingM,
 } from './directives/scanExec'
-import type { ScanOrientation } from './directives/types'
+import type { RectM, ScanOrientation } from './directives/types'
 import type { GroundTruth } from './world'
 
 // Render-facing view of the world. Rebuilt each frame; flat and lng/lat-based
@@ -40,6 +40,8 @@ export interface DroneView {
   mode: DroneMode
   /** Current sweep direction (shown while scanning/patrolling). */
   scanOrientation: ScanOrientation
+  /** The drone's current standing scan sector (drives the overlay rectangle). */
+  scanRect: RectM
   /** Progress (0..1) through the current sweep pass. */
   scanFrac: number
   fuelL: number
@@ -71,6 +73,12 @@ export interface ConsoleDroneView {
   stalenessFrac: number
   /** Last reported sweep orientation, or null if never contacted. */
   scanOrientation: ScanOrientation | null
+  /** Last reported scan sector, or null if never contacted (overlay falls back). */
+  scanRect: RectM | null
+  /** Operator-requested sector awaiting the drone's next sync (a redefine's rect,
+   * or the default sector for a restore). Null once downloaded or if none —
+   * drives the "pending" bright rectangle in the console. */
+  pendingSectorRect: RectM | null
   lastContactAt: number | null
   contactAgeMin: number | null
   /** Last confirmed (reported) position, or null if never contacted. */
@@ -168,6 +176,11 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
     const hue = ((order.get(rec.id) ?? 0) * 360) / fleetN
     const pendingCount = rec.pending.length
     const downloadedCount = rec.pending.filter((p) => p.downloadedAt != null).length
+    // Operator's not-yet-downloaded sector change (a redefine's rect, or the
+    // default sector for a restore). Cleared the moment the drone downloads it.
+    const ps = rec.pendingSector
+    const pendingSectorRect: RectM | null =
+      ps && ps.downloadedAt == null ? (ps.rect ?? scanSectorFor(rec.id)) : null
 
     if (!rec.reported || rec.lastContactAt == null) {
       drones.push({
@@ -177,6 +190,8 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
         staleness: 'unknown',
         stalenessFrac: 1,
         scanOrientation: null,
+        scanRect: null,
+        pendingSectorRect,
         lastContactAt: null,
         contactAgeMin: null,
         reportedPosition: null,
@@ -225,7 +240,7 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
     if (rep.status === 'airborne') {
       const dist = cfg.speedMPerMin * age
       uncertaintyRadiusM = cfg.speedMPerMin * age * 0.3
-      const sector = rep.scanning ? scanSectorFor(rec.id) : null
+      const sector = rep.scanning ? (rep.patrolRect ?? scanSectorFor(rec.id)) : null
       if (sector) {
         // Reconstruct the sweep, anchor at the last fix (nearest point on the
         // path), and step `dist` forward, wrapping around the looping pattern.
@@ -273,6 +288,8 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
       staleness,
       stalenessFrac,
       scanOrientation: rep.scanOrientation,
+      scanRect: rep.patrolRect,
+      pendingSectorRect,
       lastContactAt: rec.lastContactAt,
       contactAgeMin: age,
       reportedPosition: [reportedLL.lng, reportedLL.lat],
@@ -329,6 +346,7 @@ export function buildSnapshot(w: GroundTruth, meta: SnapshotMeta): TruthSnapshot
       status: d.status,
       mode: modeOf(d),
       scanOrientation: d.scanOrientation,
+      scanRect: d.patrolRect,
       scanFrac: d.scanFrac,
       fuelL: d.fuelL,
       fuelFrac: d.fuelL / w.cfg.fuelCapacityL,
