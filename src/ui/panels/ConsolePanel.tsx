@@ -33,7 +33,7 @@ function ConsoleFleetList({
         >
           <span
             className="dot"
-            style={{ background: rgbCss(hsvToRgb(d.hue, 1, staleValue(d.contactAgeMin))) }}
+            style={{ background: rgbCss(hsvToRgb(d.hue, 1, staleValue(d.stalenessFrac))) }}
           />
           <span className="fl-id">{d.id}</span>
           <span className={'fl-mode stale-text-' + d.staleness}>

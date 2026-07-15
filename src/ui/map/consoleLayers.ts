@@ -23,10 +23,10 @@ function headingEndpoint(
   return [ll.lng, ll.lat]
 }
 
-// The drone's signature hue, darkened by its contact age (value drops 1/min
-// while blacked out, restored on the next sync).
+// The drone's signature hue, darkened by its staleness fraction (fades toward
+// black as the contact gap approaches MISSING, restored on the next sync).
 const col = (d: ConsoleDroneView, alpha: number): [number, number, number, number] => {
-  const [r, g, b] = hsvToRgb(d.hue, 1, staleValue(d.contactAgeMin))
+  const [r, g, b] = hsvToRgb(d.hue, 1, staleValue(d.stalenessFrac))
   return [r, g, b, alpha]
 }
 

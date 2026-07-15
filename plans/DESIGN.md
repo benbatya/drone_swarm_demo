@@ -65,7 +65,7 @@ buildConsoleView → User Console tab
   (`lat 37.8, lng −124.5`), longitude scaled by `cos(REF_LAT=39.95°)`. Distortion
   < ~2.7%, self-consistent (render uses the exact inverse). `M_PER_DEG = 111195`.
 - BBOX `lat 37.8–42.1, lng −124.5…−119.9` → world ≈ **392 km × 478 km**.
-- Sparse **10 m grid**: `GRID_COLS ≈ 39,212`, `GRID_ROWS ≈ 47,814`,
+- Sparse **10 m grid**: `GRID_COLS ≈ 39,206`, `GRID_ROWS ≈ 47,814`,
   `cellId = cy*GRID_COLS + cx` (max ~1.9e9, safe integer). Only fires ever occupy
   cells — there is never a dense grid array. Helpers: `lngLatToMeters` /
   `metersToLngLat`, `cellOf`, `toCellId`, `cellCenter`, `distance` (Euclidean),
@@ -89,7 +89,9 @@ buildConsoleView → User Console tab
      set, excluded from everything after); else `stepDetection`.
 4. **Gossip** — `stepGossip` (intra-swarm mesh; blackout-independent).
 5. **Sync** — `stepSync` (the console C2 link).
-6. **Scoring** — `accrue`: `fireMinutes += active fire count`.
+6. **Scoring** — `accrue`: `fireMinutes += active fire count`. Doused fires are
+   deleted from `w.fires`, so the map's `size` *is* the active count — nothing
+   lingers to be double-counted.
 
 `GroundTruth = { cfg, tick, fires: Map<CellId,FireTruth>, drones: DroneTruth[],
 score, console: ConsoleBelief }`.
@@ -214,6 +216,11 @@ drone's *heading* along its sweep).
   (`unknown` if never contacted). Sizing: worst-case routine contact gap ~75 min
   (≤32 staleness + ≤40 dark + ≤3 re-poll) sits below 76; deep outages (≥80) and
   crashes are the only things that trip MISSING.
+- A single age→scalar ramp drives every console fade: `snapshot.ts` computes
+  `stalenessFrac = min(age/76, 1)` once (0 = fresh … 1 = MISSING, denominator =
+  the MISSING threshold). The UI marker brightness is just its inverse —
+  `staleValue(stalenessFrac) = 1 − stalenessFrac` (`colors.ts`) — so panels and
+  map layers darken to black exactly as a drone trips MISSING.
 - Ghost (dead-reckoned) position: `dist = speed×age`, uncertainty radius
   `= speed×age×0.3`. If the drone was **scanning**, reconstruct its fixed-sector
   lawnmower, anchor at the nearest arc-length to the last fix, and step `dist`
@@ -250,8 +257,9 @@ drone's *heading* along its sweep).
   fire dots, drone dots + detection circles + heading ticks + id labels) ·
   `consoleLayers.ts` (belief: last-confirmed hollow ring, ghost dot, reported→ghost
   dead-reckon line, sweep-extrapolated heading tick, growing uncertainty circle,
-  color darkened by contact age) · `scanZones.ts` (fixed sector polygons + lawnmower
-  hatches). `colors.ts`: `staleValue(age)=max(0,1−age/100)`.
+  color darkened by staleness) · `scanZones.ts` (fixed sector polygons + lawnmower
+  hatches). `colors.ts`: `staleValue(stalenessFrac)=1−stalenessFrac` (the inverse
+  of the sim's `stalenessFrac` — see §7).
 - **Panels**: `GodPanel` (ConfigPanel + full fleet list + `DronePanelTruth` w/
   `BlackoutStrip` comms timeline + `FirePanel`). `ConsolePanel` (fleet w/ contact-age
   + staleness, believed-fire count + `ConsoleDroneDetail` + `DirectiveComposer` +
@@ -270,9 +278,9 @@ drone's *heading* along its sweep).
   hard-line, gossip, belief isolation, staleness, sweep dead-reckoning incl. heading),
   merge rules, directives/queue/executors, scan coverage + `headingAtDistance`,
   scan sectors, kinematics, config burn, geo round-trip, ignition, rng, simRunner.
-  There is an **untracked** `src/sim/e2e_behavior.test.ts` — a seeded full-season
-  behavior harness (belief lag, MISSING-requires-deep-outage regression, determinism,
-  crash freeze, forced RTB, gossip range). Decide whether to commit it.
+  One of those files is the seeded full-season behavior harness
+  `src/sim/e2e_behavior.test.ts` (belief lag, MISSING-requires-deep-outage
+  regression, determinism, crash freeze, forced RTB, gossip range).
 - **Playwright** (`e2e/smoke.spec.ts`): builds + previews on `:4173` (chromium
   swiftshader), loads the app, asserts the map canvas + 8 `.fleet-row`, sets ×1800,
   polls `window.__SIM__.frameCount ≥ 1000`, confirms tick/frame/drone advance and
