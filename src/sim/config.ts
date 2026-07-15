@@ -64,7 +64,7 @@ export const TICKS_PER_SEASON = TICKS_PER_DAY * SEASON_DAYS // 43,200
  */
 export const REAL_SEC_PER_TICK = 60
 /** Playback speed multipliers (× realtime). ×1 = true realtime (1 tick/min). */
-export const SPEED_MULTIPLIERS = [1, 30, 120, 480, 960, 1800] as const
+export const SPEED_MULTIPLIERS = [1, 30, 180, 480, 960, 1800] as const
 /** Default playback speed (× realtime) — true realtime. */
 export const DEFAULT_SPEED = 1
 /** Upper bound on ticks processed in a single rAF frame (fast-forward cap). */
@@ -102,8 +102,8 @@ export interface SimConfig {
   // --- Comms ---
   /** Normal drone-initiated sync cadence (sim-min). */
   syncCadenceMin: number
-  /** First retry interval after a failed sync (then halves to 1). */
-  syncRetryStartMin: number
+  /** Constant retry interval (sim-min) polled while a sync attempt is blacked out. */
+  syncRetryMin: number
   /** Contact age (min) past which the console reports a drone MISSING. */
   missingThresholdMin: number
   /** Contact age (min) past which the console shows an amber "stale" cue. */
@@ -139,8 +139,8 @@ const BASE_CONFIG: SimConfig = {
   autoEngageRangeKm: 168,
   patrolBoxKm: 200,
   syncCadenceMin: 32,
-  syncRetryStartMin: 16,
-  missingThresholdMin: 64,
+  syncRetryMin: 3,
+  missingThresholdMin: 76,
   staleThresholdMin: 40,
   connMinMin: 15,
   connMaxMin: 35,

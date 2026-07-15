@@ -69,6 +69,17 @@ The map runs fully offline (flat basemap, no tiles/keys). Press ▶, bump the sp
   detections + peer gossip) · **ConsoleBelief** (only successful syncs + operator input).
   The `comms/` module is the *only* code that reads truth and writes console belief —
   enforced by a belief-isolation test.
+- **Comms & staleness.** A drone attempts a console sync every **32 sim-min**; while
+  blacked out it re-polls at a short constant interval (`syncRetryMin`, 3 min) so it
+  reconnects within a couple of minutes of the link returning — no decreasing backoff that
+  could sleep through a connected window. Blackouts are per-drone alternating
+  connected/dark windows (~40–60% dark): mostly short **routine** outages (≤40 min) plus
+  rare **deep outages** (80–220 min). The console derives staleness from last-contact age:
+  **fresh** → **stale** (amber, dead-reckoned ghost past 40 min) → **MISSING** (red). The
+  MISSING threshold (**76 min**) sits above the worst-case routine-blackout contact gap
+  (~75 min = ≤32 min staleness + ≤40 min dark + ≤3 min re-poll) and below the shortest
+  deep outage (80 min), so **MISSING means a genuine deep outage or a crash — never
+  routine blackout flicker.**
 - **`simRunner.ts`** owns the single `requestAnimationFrame` loop (speed/pause
   accumulator), rebuilds a pooled snapshot per frame for the imperative **deck.gl** map,
   and notifies React panels through a throttled store.

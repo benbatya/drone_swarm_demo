@@ -1,6 +1,7 @@
+import type { SimConfig } from '../config'
 import type { ConsoleBelief, ConsoleDroneRecord } from '../belief/consoleBelief'
 import { enqueue } from '../directives/queue'
-import type { DroneTruth } from '../drones/drone'
+import { isScanning, type DroneTruth } from '../drones/drone'
 import type { GroundTruth } from '../world'
 import { isDarkAt } from './blackout'
 import { mergeFire } from './merge'
@@ -16,6 +17,8 @@ function uploadTelemetry(rec: ConsoleDroneRecord, d: DroneTruth, now: number): v
     forcedRtb: d.forcedRtb,
     currentDirectiveKind: d.queue[0]?.kind ?? null,
     queueLen: d.queue.length,
+    scanning: isScanning(d),
+    scanOrientation: d.scanOrientation,
   }
 }
 
@@ -35,10 +38,10 @@ function reconcilePending(rec: ConsoleDroneRecord, d: DroneTruth): void {
   d.abortedIds.length = 0 // reported and consumed
 }
 
-function download(rec: ConsoleDroneRecord, d: DroneTruth, now: number): void {
+function download(rec: ConsoleDroneRecord, d: DroneTruth, now: number, cfg: SimConfig): void {
   for (const p of rec.pending) {
     if (p.downloadedAt == null) {
-      enqueue(d, p.directive)
+      enqueue(d, p.directive, cfg)
       p.downloadedAt = now
     }
   }
@@ -49,8 +52,8 @@ function download(rec: ConsoleDroneRecord, d: DroneTruth, now: number): void {
  * docked drones are hard-lined (always connected); airborne drones succeed only
  * outside a dark window. On success it uploads telemetry + fire delta, the
  * console prunes completed/aborted pendings and the drone downloads new ones,
- * then the +32-min cadence resumes. On failure the retry interval halves
- * (16→8→4→2→1) until it succeeds.
+ * then the +32-min cadence resumes. On a blacked-out attempt it re-polls every
+ * syncRetryMin minutes until the link returns.
  */
 export function stepSync(w: GroundTruth): void {
   const now = w.tick
@@ -66,11 +69,13 @@ export function stepSync(w: GroundTruth): void {
 
     const connected = docked || !isDarkAt(c, now)
     if (!connected) {
-      c.retryIntervalMin =
-        c.retryIntervalMin === 0
-          ? cfg.syncRetryStartMin
-          : Math.max(1, Math.floor(c.retryIntervalMin / 2))
-      c.nextSyncAt = now + c.retryIntervalMin
+      // Blacked out at the attempt: re-poll at a short constant interval so the
+      // drone reconnects within ~syncRetryMin of the link returning and never
+      // sleeps through a connected window. (A decreasing/halving backoff would
+      // skip connected windows and let routine outages stack past the missing
+      // threshold — see missingThresholdMin sizing.)
+      c.retryIntervalMin = cfg.syncRetryMin
+      c.nextSyncAt = now + cfg.syncRetryMin
       continue
     }
 
@@ -79,7 +84,7 @@ export function stepSync(w: GroundTruth): void {
       uploadTelemetry(rec, d, now)
       uploadFires(w.console, d, c.lastSyncAt)
       reconcilePending(rec, d)
-      download(rec, d, now)
+      download(rec, d, now, cfg)
     }
     c.lastSyncAt = now
     c.retryIntervalMin = 0

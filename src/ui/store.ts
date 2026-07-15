@@ -43,8 +43,8 @@ export const useUIStore = create<UIState>((set) => ({
   clearSelection: () => set({ selection: null }),
   draftRect: null,
   setDraftRect: (r) => set({ draftRect: r }),
-  showHillshade: false,
+  showHillshade: true,
   toggleHillshade: () => set((s) => ({ showHillshade: !s.showHillshade })),
-  showAllScans: false,
+  showAllScans: true,
   toggleAllScans: () => set((s) => ({ showAllScans: !s.showAllScans })),
 }))

@@ -1,3 +1,4 @@
+import type { SimConfig } from '../config'
 import type { DroneTruth } from '../drones/drone'
 import type { GroundTruth } from '../world'
 import { stepExtinguish } from './extinguishExec'
@@ -26,11 +27,12 @@ export function stepExec(
 export function createExec(
   dir: Directive,
   d: DroneTruth,
+  cfg: SimConfig,
   elapsedMin = 0,
 ): DirectiveExec {
   switch (dir.kind) {
     case 'scan':
-      return makeScanExec(dir.rect, dir.durationMin, d.pos, elapsedMin)
+      return makeScanExec(dir.rect, dir.durationMin, d.pos, cfg, d.scanOrientation, elapsedMin)
     case 'extinguish':
       return { kind: 'extinguish', cellId: dir.cellId }
     case 'rtb':

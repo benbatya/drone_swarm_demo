@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { makeConfig } from '../config'
 import type { Vec2 } from '../geo'
-import { buildLawnmower, SWEEP_SPACING_M } from './scanExec'
+import { buildLawnmower, makeScanExec, stepScan, sweepSpacingM } from './scanExec'
+import type { DroneTruth } from '../drones/drone'
+import type { GroundTruth } from '../world'
 import type { RectM } from './types'
+
+const SPACING = sweepSpacingM(makeConfig())
 
 function segDist(p: Vec2, a: Vec2, b: Vec2): number {
   const dx = b.x - a.x
@@ -26,18 +31,60 @@ function maxGap(rect: RectM, wp: Vec2[], step: number): number {
 }
 
 describe('lawnmower coverage', () => {
+  it('spacing is twice the fire-detection radius', () => {
+    expect(SPACING).toBe(2 * makeConfig().detectionRadiusM)
+  })
+
   it('keeps every rect point within the detection radius of the path', () => {
     const rect: RectM = { minX: 0, minY: 0, maxX: 300_000, maxY: 220_000 }
-    const wp = buildLawnmower(rect, { x: 0, y: 0 })
-    // Spacing is the detection diameter, so worst-case gap is the radius (50km).
-    expect(maxGap(rect, wp, 20_000)).toBeLessThanOrEqual(SWEEP_SPACING_M / 2 + 1)
+    const wp = buildLawnmower(rect, { x: 0, y: 0 }, SPACING, 'horizontal')
+    // Spacing is the detection diameter, so worst-case gap is the radius.
+    expect(maxGap(rect, wp, 5_000)).toBeLessThanOrEqual(SPACING / 2 + 1)
   })
 
   it('enters from the traversal end nearest the drone', () => {
     const rect: RectM = { minX: 0, minY: 0, maxX: 300_000, maxY: 220_000 }
     // Horizontal sweeps run along x; the two traversal ends are at y=min and
     // y=max. Entry should start at whichever end is nearer.
-    expect(buildLawnmower(rect, { x: 0, y: 0 })[0].y).toBe(0)
-    expect(buildLawnmower(rect, { x: 0, y: 220_000 })[0].y).toBe(220_000)
+    expect(buildLawnmower(rect, { x: 0, y: 0 }, SPACING, 'horizontal')[0].y).toBe(0)
+    expect(buildLawnmower(rect, { x: 0, y: 220_000 }, SPACING, 'horizontal')[0].y).toBe(220_000)
+  })
+
+  it('flips sweep orientation on each completed pass and tracks 0..1 progress', () => {
+    const cfg = makeConfig()
+    // Tiny sector so a full pass completes in a handful of ticks.
+    const rect: RectM = { minX: 0, minY: 0, maxX: 100, maxY: 100 }
+    const d = {
+      pos: { x: 0, y: 0 },
+      heading: 0,
+      scanOrientation: 'horizontal' as const,
+      scanFrac: 0,
+    } as unknown as DroneTruth
+    const w = { cfg } as unknown as GroundTruth
+    const exec = makeScanExec(rect, Infinity, d.pos, cfg, 'horizontal')
+
+    let steps = 0
+    while (d.scanOrientation === 'horizontal' && steps < 200) {
+      stepScan(exec, d, w)
+      expect(d.scanFrac).toBeGreaterThanOrEqual(0)
+      expect(d.scanFrac).toBeLessThanOrEqual(1)
+      steps++
+    }
+    // A completed pass toggled horizontal → vertical, and the exec rebuilt to match.
+    expect(d.scanOrientation).toBe('vertical')
+    expect(exec.orientation).toBe('vertical')
+    expect(steps).toBeLessThan(200)
+  })
+
+  it('orientation transposes the sweep direction', () => {
+    const rect: RectM = { minX: 0, minY: 0, maxX: 300_000, maxY: 220_000 }
+    // Horizontal: the first leg runs along x (endpoints share y).
+    const h = buildLawnmower(rect, { x: 0, y: 0 }, SPACING, 'horizontal')
+    expect(h[0].y).toBe(h[1].y)
+    expect(h[0].x).not.toBe(h[1].x)
+    // Vertical: the first leg runs along y (endpoints share x).
+    const v = buildLawnmower(rect, { x: 0, y: 0 }, SPACING, 'vertical')
+    expect(v[0].x).toBe(v[1].x)
+    expect(v[0].y).not.toBe(v[1].y)
   })
 })
