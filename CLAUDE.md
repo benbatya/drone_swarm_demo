@@ -17,9 +17,11 @@ Run from the repo root (`npm install` first if `node_modules/` is missing).
 | Unit tests (watch) | `npm run test:watch` |
 | End-to-end smoke test | `npm run test:e2e` (Playwright) |
 
-Before considering a change done, run: `npm run build && npm test && npm run test:e2e`.
-The Playwright smoke test asserts **zero console errors** while the sim runs, so
-keep the app offline/keyless — no external tile/style/network fetches at runtime.
+Before considering a change done, run: `npm run build && npm test && npm run test:e2e`,
+then **restart the dev server as the final step** so it serves the current code
+(`npm run dev`). The Playwright smoke test asserts **zero console errors** while
+the sim runs, so keep the app offline/keyless — no external tile/style/network
+fetches at runtime.
 
 ## Data generation (dev-time only, not shipped)
 
