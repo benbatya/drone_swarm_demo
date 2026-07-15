@@ -69,6 +69,8 @@ export interface ConsoleDroneView {
   staleness: Staleness
   /** 0 = fresh … 1 = missing; drives the green→blue color fade. */
   stalenessFrac: number
+  /** Last reported sweep orientation, or null if never contacted. */
+  scanOrientation: ScanOrientation | null
   lastContactAt: number | null
   contactAgeMin: number | null
   /** Last confirmed (reported) position, or null if never contacted. */
@@ -163,6 +165,7 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
         hue,
         staleness: 'unknown',
         stalenessFrac: 1,
+        scanOrientation: null,
         lastContactAt: null,
         contactAgeMin: null,
         reportedPosition: null,
@@ -245,6 +248,7 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
       hue,
       staleness,
       stalenessFrac,
+      scanOrientation: rep.scanOrientation,
       lastContactAt: rec.lastContactAt,
       contactAgeMin: age,
       reportedPosition: [reportedLL.lng, reportedLL.lat],

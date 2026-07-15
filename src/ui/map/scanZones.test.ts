@@ -27,4 +27,17 @@ describe('scanZoneLayers', () => {
     expect(zones.props.data).toHaveLength(FLEET.length)
     expect(layers.some((l) => l.id === 'scan-hatches')).toBe(true)
   })
+
+  it('flips the hatch path when the drone sweep orientation changes', () => {
+    const hatchPath = (orientation: 'horizontal' | 'vertical') => {
+      const layers = scanZoneLayers([{ id: 'redding-1', hue: 0, scanOrientation: orientation }], {
+        selectedId: 'redding-1',
+        showAll: false,
+      })
+      const hatches = layers.find((l) => l.id === 'scan-hatches')
+      // @ts-expect-error deck.gl layer props at runtime
+      return hatches.props.data[0].path as [number, number][]
+    }
+    expect(hatchPath('horizontal')).not.toEqual(hatchPath('vertical'))
+  })
 })
