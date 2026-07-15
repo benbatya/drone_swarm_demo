@@ -5,7 +5,7 @@
 > the real defaults in `src/sim/config.ts`; when in doubt, that file wins.
 >
 > Note on the other docs: `plans/implementation_plan.md` is a **per-feature
-> working plan** (it gets overwritten per PR — currently the basemap feature), and
+> working plan** (overwritten per PR — it never describes `main` as shipped), and
 > `plans/initial_design.md` is the original abstract C2 thinking doc. `README.md`
 > is the user-facing overview. **This file is the durable architecture reference.**
 
@@ -122,8 +122,9 @@ score, console: ConsoleBelief }`.
 | `seed` | 1337 | |
 
 Time: `TICKS_PER_DAY=1440`, `TICKS_PER_SEASON=43_200` (≈24 min wall-clock at ×1
-and 30 fps). Speed multipliers `[1, 30, 180, 480, 960, 1800]`;
-`MAX_TICKS_PER_FRAME=600`. Bases: Redding, Chico, Weed, Sacramento.
+and 30 fps). Speed multipliers `[1, 30, 180, 480, 960, 1800]` with
+`DEFAULT_SPEED = 480` — the sim **fast-forwards on load** rather than running
+true-realtime; `MAX_TICKS_PER_FRAME=600`. Bases: Redding, Chico, Weed, Sacramento.
 
 ## 6. Drones, directives, autonomy
 
@@ -133,7 +134,9 @@ and 30 fps). Speed multipliers `[1, 30, 180, 480, 960, 1800]`;
 status: 'airborne'|'docked'|'crashed', crashedAt?, dockRemainingMin,
 belief, comms, queue: Directive[], exec, execDirId, scanProgress (resume state),
 override: RtbExec|null, forcedRtb, autoPatrol: ScanExec, autoExec,
-scanOrientation: 'horizontal'|'vertical', scanFrac, abortedIds[]`.
+scanOrientation: 'horizontal'|'vertical', scanFrac, abortedIds[],
+dousedSinceSync[] (cells doused since last sync), extinguishedTotal (running
+lifetime count)`.
 
 `createFleet` ids are `${baseId}-${i+1}`; all start airborne, full. Comms uses a
 **separate forked RNG stream** (`seed ^ 0x5eed`) so blackout draws don't perturb
@@ -155,8 +158,10 @@ ignition.
   orientation** (H↔V) and rebuild — so scans re-cover and autoPatrol runs forever
   (`durationMin = Infinity`). Updates `scanFrac`. Done at `elapsedMin ≥ durationMin`.
 - **Extinguish** `stepExtinguish`: fly to `cellCenter`; within `DROP_RADIUS_M=50`
-  → extinguish fire, `score.doused++`, `retardant−1`, mark own belief out. If the
-  fire is already gone on arrival → complete without dropping.
+  → extinguish fire, `score.doused++`, `retardant−1`, mark own belief out, and
+  **log the cell to `dousedSinceSync` + bump `extinguishedTotal`** (both reported
+  to the console at the next sync). If the fire is already gone on arrival →
+  complete without dropping.
 - **RTB** `stepRtb`: transit → dock (`status='docked'`, `dockRemainingMin=60`) →
   countdown → refuel/rearm to full → airborne, done.
 
@@ -182,8 +187,14 @@ draw only *bounded* scan directives (shift-drag rect); the standing patrol is th
 fixed sector. `patrolBoxKm` is only a fallback for exotic fleet configs.
 
 Lawnmower (`scanExec.ts`): `sweepSpacingM = 2×detectionRadiusM = 20 km`;
-`buildLawnmower` is boustrophedon, entering from the nearest end. Path helpers:
-`pathLength`, `pointAtDistance(s)`, `nearestArcLength(p)`, and
+`buildLawnmower` is boustrophedon, entering from the nearest end. Each leg is
+**clipped to land** (`landExtentAlongAxis` in `land.ts`, coastline-refined by
+bisection) so the sweep's turnarounds follow the coast instead of running out
+over the Pacific; rows entirely over water are dropped (fail-open to the full
+rectangle if a sector holds no land). The clipped shape is deterministic in
+`(rect, spacing, orientation)` and **memoized**, so the console's blackout
+reconstruction and the map hatches stay byte-identical to the drone's truth.
+Path helpers: `pathLength`, `pointAtDistance(s)`, `nearestArcLength(p)`, and
 `headingAtDistance(pts, s)` (the polyline tangent — used to dead-reckon a scanning
 drone's *heading* along its sweep).
 
@@ -198,9 +209,11 @@ drone's *heading* along its sweep).
   reschedule `now + syncRetryMin` (constant **3-min re-poll**, deliberately not
   backoff, so a drone reconnects promptly and routine outages can't stack past the
   missing threshold). On success: upload telemetry (`pos, heading, fuel, retardant,
-  status, forcedRtb, currentDirectiveKind, queueLen, scanning, scanOrientation`) +
-  fire delta (`updatedAt > lastSyncAt`), reconcile/prune pendings, download new
-  operator directives, then `nextSyncAt = now + 32`.
+  status, forcedRtb, currentDirectiveKind, queueLen, scanning, scanOrientation,
+  extinguishedTotal`) + fire delta (`updatedAt > lastSyncAt`) + **doused-fire
+  locations** (`dousedSinceSync` → `ConsoleBelief.extinguished`, then cleared),
+  reconcile/prune pendings, download new operator directives, then
+  `nextSyncAt = now + 32`.
 - **Gossip** (`gossip.ts`): every airborne pair within `gossipRangeM` (50 km)
   exchanges fire beliefs both ways; blackout-independent (the intra-swarm mesh).
 - **Merge** (`merge.ts` `mergeFire`): dedupe by `cellId`; `believedOut` is monotonic
@@ -208,7 +221,9 @@ drone's *heading* along its sweep).
   commutative (tested).
 - **`KnownFire`** `{cellId, firstSeenAt, source:'self'|'gossip'|'console',
   believedOut, updatedAt}`. **`ConsoleDroneRecord`** `{id, lastContactAt,
-  reported | null, pending[]}`.
+  reported | null, pending[]}`. **`ConsoleBelief.extinguished`**
+  `Map<CellId, ExtinguishedFire{cellId, extinguishedAt, extinguishedBy}>`
+  accumulates the doused locations drones report (keyed by cell, latest wins).
 
 ### Staleness & dead-reckoning (`snapshot.ts buildConsoleView`)
 
@@ -224,7 +239,10 @@ drone's *heading* along its sweep).
 - Ghost (dead-reckoned) position: `dist = speed×age`, uncertainty radius
   `= speed×age×0.3`. If the drone was **scanning**, reconstruct its fixed-sector
   lawnmower, anchor at the nearest arc-length to the last fix, and step `dist`
-  forward (wrapping) — and set the **ghost heading from the sweep tangent**
+  **in the drone's true travel direction** — chosen from the *reported heading*,
+  because `buildLawnmower`'s entry-based orientation can otherwise reverse the
+  reconstructed path and run the ghost backwards along the sweep — wrapping around
+  the loop, and set the **ghost heading from the sweep tangent**
   (`headingAtDistance`) rather than freezing the last reported heading. Otherwise
   project straight along the reported heading.
 
@@ -232,7 +250,8 @@ drone's *heading* along its sweep).
 
 - **`snapshot.ts`**: `buildSnapshot` → `TruthSnapshot` (God Mode: full drone/fire
   truth, score, `mode` per drone, plus an embedded `ConsoleView`). `buildConsoleView`
-  → belief view (ghosts, staleness, pending/downloaded counts).
+  → belief view (ghosts, staleness, pending/downloaded counts, extinguished-fire
+  markers tinted by the extinguishing drone's hue + a per-drone extinguished count).
 - **`simRunner.ts SimRunner`**: owns the world and the single rAF loop. Per frame:
   accumulate `dt×speed/60` ticks (capped 600), run `tickWorld` that many times,
   `frameCount++`, rebuild snapshots, push to the **per-frame map channel**
@@ -257,15 +276,17 @@ drone's *heading* along its sweep).
   fire dots, drone dots + detection circles + heading ticks + id labels) ·
   `consoleLayers.ts` (belief: last-confirmed hollow ring, ghost dot, reported→ghost
   dead-reckon line, sweep-extrapolated heading tick, growing uncertainty circle,
-  color darkened by staleness) · `scanZones.ts` (fixed sector polygons + lawnmower
-  hatches; the hatches follow each drone's **current sweep orientation** and flip
+  extinguished-fire dots tinted with the extinguishing drone's hue at half
+  brightness, color darkened by staleness) · `scanZones.ts` (fixed sector polygons +
+  land-clipped lawnmower hatches; the hatches follow each drone's **current sweep orientation** and flip
   H↔V with it — God Mode off the live `scanOrientation`, the console off the last
   *reported* one, falling back to the sector's default sweep for a never-contacted
   drone). `colors.ts`: `staleValue(stalenessFrac)=1−stalenessFrac` (the inverse
   of the sim's `stalenessFrac` — see §7).
 - **Panels**: `GodPanel` (ConfigPanel + full fleet list + `DronePanelTruth` w/
   `BlackoutStrip` comms timeline + `FirePanel`). `ConsolePanel` (fleet w/ contact-age
-  + staleness, believed-fire count + `ConsoleDroneDetail` + `DirectiveComposer` +
+  + staleness, believed-fire count + `ConsoleDroneDetail` — reported status/fuel/
+  retardant + a *Fires extinguished* count — + `DirectiveComposer` +
   `ConsoleFireDetail`). `DirectiveComposer`: scan (needs a drawn rect + durationMin,
   default 240) / extinguish (click a known fire) / rtb (pick base), importance 1–10.
   `SeasonSummary` end card + restart.
@@ -280,8 +301,9 @@ drone's *heading* along its sweep).
 
 - **vitest** (17 tracked files, all headless): sim season/detection/crash
   (`world`), autonomy, comms (dark fraction, 32-min cadence, 3-min retry, docked
-  hard-line, gossip, belief isolation, staleness, sweep dead-reckoning incl. heading),
-  merge rules, directives/queue/executors, scan coverage + `headingAtDistance`,
+  hard-line, gossip, belief isolation, staleness, sweep dead-reckoning incl. heading,
+  extinguished-fire reporting), merge rules, directives/queue/executors,
+  land-clipped scan coverage + `headingAtDistance`,
   scan sectors, kinematics, config burn, geo round-trip, ignition, rng, simRunner.
   One of those files is the seeded full-season behavior harness
   `src/sim/e2e_behavior.test.ts` (belief lag, MISSING-requires-deep-outage
