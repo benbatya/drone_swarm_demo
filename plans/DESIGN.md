@@ -119,12 +119,21 @@ score, console: ConsoleBelief }`.
 | `connMin/Max` | 15 / 35 | connected windows |
 | `routineDarkMin/Max` | 10 / 40 | routine outages |
 | `deepOutageProb` + `deepDarkMin/Max` | 0.05 · 80 / 220 | rare deep outages |
-| `seed` | 1337 | |
+| `seed` | 1337 | `BASE_CONFIG` default; **the browser boot randomizes it** — see below |
 
 Time: `TICKS_PER_DAY=1440`, `TICKS_PER_SEASON=43_200` (≈24 min wall-clock at ×1
 and 30 fps). Speed multipliers `[1, 30, 180, 480, 960, 1800]` with
 `DEFAULT_SPEED = 480` — the sim **fast-forwards on load** rather than running
 true-realtime; `MAX_TICKS_PER_FRAME=600`. Bases: Redding, Chico, Weed, Sacramento.
+
+**Boot seed randomization** — `main.tsx` builds the runner with
+`makeConfig({ seed: randomSeed() })`, so **every page load is a different fire
+season**. The draw lives in a UI-layer helper (`src/ui/randomSeed.ts`,
+`Math.floor(Math.random()×2³²)`) to keep `src/sim/` pure — the sim is still
+deterministic given its seed. `BASE_CONFIG.seed` (1337) is untouched, so headless
+tests (which pass explicit seeds) are unaffected, and `restart()` ("Run another
+season") replays the boot seed; God Mode's `ConfigPanel` can set an explicit seed
+to reproduce a run.
 
 ## 6. Drones, directives, autonomy
 
@@ -133,7 +142,9 @@ true-realtime; `MAX_TICKS_PER_FRAME=600`. Bases: Redding, Chico, Weed, Sacrament
 `id, homeBaseId, homePos, pos, heading, fuelL, retardant,
 status: 'airborne'|'docked'|'crashed', crashedAt?, dockRemainingMin,
 belief, comms, queue: Directive[], exec, execDirId, scanProgress (resume state),
-override: RtbExec|null, forcedRtb, autoPatrol: ScanExec, autoExec,
+override: RtbExec|null, forcedRtb, patrolRect (current standing scan sector —
+operator-redefinable, defaults to the fixed per-drone sector), autoPatrol: ScanExec
+(sweeps patrolRect), autoExec,
 scanOrientation: 'horizontal'|'vertical', scanFrac, abortedIds[],
 dousedSinceSync[] (cells doused since last sync), extinguishedTotal (running
 lifetime count)`.
@@ -169,22 +180,33 @@ ignition.
 
 - **Idle behavior** (no override, empty queue): if `retardant > 0` and a known
   active fire is within **168 km** → self-assign an extinguish on the nearest
-  (`autoExec`); else fly **autoPatrol** over the drone's fixed sector. Re-evaluated
+  (`autoExec`); else fly **autoPatrol** over the drone's standing scan sector
+  (`patrolRect`, operator-redefinable — §6.5). Re-evaluated
   each tick — drops the target if a peer douses it (belief flips out).
 - **`applyFuelPolicy`**: forced RTB when `retardant ≤ 0`, or `fuelL < 120`, or
   remaining range `≤ distToNearestBase×1.25 + 25 km`. Installs an `override` RtbExec
   to the nearest base and aborts the current queued directive. A drone stranded
   beyond its range still **crashes** at fuel 0.
 
-### 6.5 Scan sectors — **fixed, not operator-drawn** (`drones/scanSectors.ts`)
+### 6.5 Scan sectors — **default fixed per-drone, operator-redefinable** (`drones/scanSectors.ts`)
 
-`scanSectorFor(id)` derives a **static rectangle per drone** from the base layout:
-latitude band = halfway to the neighboring bases (or bbox border); longitude split
-by index — **`-1` = west half, `-2` = east half** of the base's column. Both the sim
-and the (belief-isolated) console compute this from the id alone, which is what lets
-the console reconstruct a scanning drone's lawnmower during a blackout. Operators
-draw only *bounded* scan directives (shift-drag rect); the standing patrol is the
-fixed sector. `patrolBoxKm` is only a fallback for exotic fleet configs.
+`scanSectorFor(id)` derives a **static default rectangle per drone** from the base
+layout: latitude band = halfway to the neighboring bases (or bbox border); longitude
+split by index — **`-1` = west half, `-2` = east half** of the base's column.
+`defaultSectorFor(id, home, cfg) = scanSectorFor(id) ?? homeSectorRect(home,
+patrolBoxKm)` (`patrolBoxKm` is only a fallback for exotic fleet configs). A drone's
+**live** sector is `DroneTruth.patrolRect` (initialized to the default);
+`setPatrolSector(d, rect, cfg)` overwrites it and rebuilds `autoPatrol`.
+
+**Operators can now persistently redefine a drone's standing scan zone** (PR #35):
+a shift-drag on the User Console pushes a `PendingSector` that the drone adopts —
+comms-gated, belief-lagged — at its next successful sync (§7), and reports back so
+the console believes it. `rect: null` restores the default sector. (The *bounded*
+`scan` directive kind still exists in the model/executors but the composer no longer
+issues it — the scan action redefines the standing sector instead.) Because both the
+sim and the belief-isolated console can compute the *default* from the id alone, a
+never-contacted console drone still reconstructs a plausible sweep; once contacted,
+the console dead-reckons off the drone's **reported** `patrolRect`.
 
 Lawnmower (`scanExec.ts`): `sweepSpacingM = 2×detectionRadiusM = 20 km`;
 `buildLawnmower` is boustrophedon, entering from the nearest end. Each leg is
@@ -210,10 +232,11 @@ drone's *heading* along its sweep).
   backoff, so a drone reconnects promptly and routine outages can't stack past the
   missing threshold). On success: upload telemetry (`pos, heading, fuel, retardant,
   status, forcedRtb, currentDirectiveKind, queueLen, scanning, scanOrientation,
-  extinguishedTotal`) + fire delta (`updatedAt > lastSyncAt`) + **doused-fire
-  locations** (`dousedSinceSync` → `ConsoleBelief.extinguished`, then cleared),
-  reconcile/prune pendings, download new operator directives, then
-  `nextSyncAt = now + 32`.
+  patrolRect, extinguishedTotal`) + fire delta (`updatedAt > lastSyncAt`) +
+  **doused-fire locations** (`dousedSinceSync` → `ConsoleBelief.extinguished`, then
+  cleared), reconcile/prune pendings, **download new operator directives *and* any
+  pending scan-sector redefinition** (`pendingSector`: apply `rect ?? defaultSectorFor`
+  via `setPatrolSector`, stamp `downloadedAt`), then `nextSyncAt = now + 32`.
 - **Gossip** (`gossip.ts`): every airborne pair within `gossipRangeM` (50 km)
   exchanges fire beliefs both ways; blackout-independent (the intra-swarm mesh).
 - **Merge** (`merge.ts` `mergeFire`): dedupe by `cellId`; `believedOut` is monotonic
@@ -221,7 +244,11 @@ drone's *heading* along its sweep).
   commutative (tested).
 - **`KnownFire`** `{cellId, firstSeenAt, source:'self'|'gossip'|'console',
   believedOut, updatedAt}`. **`ConsoleDroneRecord`** `{id, lastContactAt,
-  reported | null, pending[]}`. **`ConsoleBelief.extinguished`**
+  reported | null, pending[], pendingSector | null}` — `reported.patrolRect` carries
+  the last-heard sector; **`PendingSector`** `{rect: RectM|null, issuedAt,
+  downloadedAt}` is the operator's latest not-yet-downloaded redefinition
+  (`addPendingSector`, latest wins; `null` rect = restore default).
+  **`ConsoleBelief.extinguished`**
   `Map<CellId, ExtinguishedFire{cellId, extinguishedAt, extinguishedBy}>`
   accumulates the doused locations drones report (keyed by cell, latest wins).
 
@@ -237,8 +264,9 @@ drone's *heading* along its sweep).
   `staleValue(stalenessFrac) = 1 − stalenessFrac` (`colors.ts`) — so panels and
   map layers darken to black exactly as a drone trips MISSING.
 - Ghost (dead-reckoned) position: `dist = speed×age`, uncertainty radius
-  `= speed×age×0.3`. If the drone was **scanning**, reconstruct its fixed-sector
-  lawnmower, anchor at the nearest arc-length to the last fix, and step `dist`
+  `= speed×age×0.3`. If the drone was **scanning**, reconstruct the lawnmower over
+  its **reported `patrolRect`** (fall back to `scanSectorFor(id)`), anchor at the
+  nearest arc-length to the last fix, and step `dist`
   **in the drone's true travel direction** — chosen from the *reported heading*,
   because `buildLawnmower`'s entry-based orientation can otherwise reverse the
   reconstructed path and run the ghost backwards along the sweep — wrapping around
@@ -249,9 +277,13 @@ drone's *heading* along its sweep).
 ## 8. Snapshots & runner
 
 - **`snapshot.ts`**: `buildSnapshot` → `TruthSnapshot` (God Mode: full drone/fire
-  truth, score, `mode` per drone, plus an embedded `ConsoleView`). `buildConsoleView`
-  → belief view (ghosts, staleness, pending/downloaded counts, extinguished-fire
-  markers tinted by the extinguishing drone's hue + a per-drone extinguished count).
+  truth, score, `mode` per drone, `DroneView.scanRect = patrolRect`, plus an embedded
+  `ConsoleView`). `buildConsoleView` → belief view (ghosts, staleness,
+  pending/downloaded counts, extinguished-fire markers tinted by the extinguishing
+  drone's hue + a per-drone extinguished count). Each `ConsoleDroneView` also carries
+  `scanRect` (last reported sector, drives the confirmed-zone overlay) and
+  `pendingSectorRect` (the operator's not-yet-downloaded sector — a redefine's rect,
+  or the default sector for a restore — cleared the instant the drone downloads it).
 - **`simRunner.ts SimRunner`**: owns the world and the single rAF loop. Per frame:
   accumulate `dt×speed/60` ticks (capped 600), run `tickWorld` that many times,
   `frameCount++`, rebuild snapshots, push to the **per-frame map channel**
@@ -259,17 +291,30 @@ drone's *heading* along its sweep).
   (`useSyncExternalStore`, for panels). At season end it pauses. Exposes
   `window.__SIM__ = {frameCount, tickCount, running, drone0, activeFires}` for the
   Playwright smoke. `stepTicks(n)` runs headless; `reconfigure/restart` rebuild the
-  world; `issueDirective` = `addPending`; `getBlackout(id)` feeds the God timeline.
+  world; `issueDirective` = `addPending`; `setScanSector(id, rect|null)` =
+  `addPendingSector` (operator sector redefinition, `null` = restore default);
+  `getBlackout(id)` feeds the God timeline.
 
 ## 9. UI (`src/ui/`)
 
 - **App / tabs**: `User Console` (`source='console'`) and `God Mode`
-  (`source='truth'`), both render one `SimulationView`. `store.ts` (zustand):
-  `activeTab` (default console), `selection`, `draftRect`, `showHillshade` (on),
-  `showAllScans` (on).
+  (`source='truth'`), both render one `SimulationView`. The header carries an
+  **About** button. `store.ts` (zustand): `activeTab` (default console), `selection`,
+  `draftRect`, `showHillshade` (on), `showAllScans` (on), and `showAbout` /
+  `aboutByDefault` (the About dialog — see below).
+- **About dialog** (`panels/AboutDialog.tsx`): explains the truth/belief C2 premise
+  and the two tabs (adapted from §1). **Opens on load** iff the persisted
+  `aboutByDefault` preference is on (`localStorage` key
+  `fireSeason.showAboutByDefault`, default true, toggled by a "Display by default"
+  checkbox); the header button reopens it. Dismissed via the button, backdrop click,
+  or Escape. All storage access is `try/catch`ed so private-mode failures degrade
+  gracefully.
 - **Map** (`MapCanvas.tsx`): MapLibre `Map` + deck.gl `MapboxOverlay(interleaved)`.
   `FLAT_STYLE` = single ocean-blue background (offline, no tiles). Center =
-  world center, zoom 5.4. **Shift-drag on the console tab draws a scan `draftRect`.**
+  world center, zoom 5.4. **Shift-drag on the console tab draws a `draftRect` that,
+  on release, redefines the selected drone's standing scan zone** (§6.5). MapLibre's
+  built-in shift-drag `boxZoom` is disabled so the gesture sets the sector instead of
+  zooming into the rectangle.
 - **Layers**: `basemap.ts` (bundled Natural Earth land/urban/lakes/rivers/states/
   places + optional `hillshade.webp` BitmapLayer) · `graticule.ts` (LOD grid:
   50 km/10 km/1 km/100 m/10 m by zoom, ≤600 lines) · `layers.ts` (God: base dots,
@@ -277,18 +322,25 @@ drone's *heading* along its sweep).
   `consoleLayers.ts` (belief: last-confirmed hollow ring, ghost dot, reported→ghost
   dead-reckon line, sweep-extrapolated heading tick, growing uncertainty circle,
   extinguished-fire dots tinted with the extinguishing drone's hue at half
-  brightness, color darkened by staleness) · `scanZones.ts` (fixed sector polygons +
-  land-clipped lawnmower hatches; the hatches follow each drone's **current sweep orientation** and flip
-  H↔V with it — God Mode off the live `scanOrientation`, the console off the last
-  *reported* one, falling back to the sector's default sweep for a never-contacted
-  drone). `colors.ts`: `staleValue(stalenessFrac)=1−stalenessFrac` (the inverse
+  brightness, color darkened by staleness, plus a **`pending-scan-zone`** bright
+  near-white bounding rectangle in the drone's hue for a `pendingSectorRect` — an
+  operator sector redefinition the drone hasn't downloaded yet; it clears the instant
+  the drone adopts it) · `scanZones.ts` (sector polygons + land-clipped lawnmower
+  hatches; the polygon honors each drone's current `scanRect` — the operator-redefined
+  sector — falling back to the fixed `scanSectorFor(id)`; the hatches follow each
+  drone's **current sweep orientation** and flip H↔V with it — God Mode off the live
+  `scanOrientation`, the console off the last *reported* one, falling back to the
+  sector's default sweep for a never-contacted drone). `colors.ts`: `staleValue(stalenessFrac)=1−stalenessFrac` (the inverse
   of the sim's `stalenessFrac` — see §7).
 - **Panels**: `GodPanel` (ConfigPanel + full fleet list + `DronePanelTruth` w/
   `BlackoutStrip` comms timeline + `FirePanel`). `ConsolePanel` (fleet w/ contact-age
   + staleness, believed-fire count + `ConsoleDroneDetail` — reported status/fuel/
   retardant + a *Fires extinguished* count — + `DirectiveComposer` +
-  `ConsoleFireDetail`). `DirectiveComposer`: scan (needs a drawn rect + durationMin,
-  default 240) / extinguish (click a known fire) / rtb (pick base), importance 1–10.
+  `ConsoleFireDetail`). `DirectiveComposer`: **scan zone** (redefine the standing
+  sector — needs a shift-drawn rect; a "Restore default scan zone" button clears it;
+  calls `runner.setScanSector`, *not* a queued directive, so no duration/importance
+  field) / extinguish (click a known fire) / rtb (pick base); importance 1–10 applies
+  to the extinguish/rtb directives.
   `SeasonSummary` end card + restart.
 - **God-Mode-only controls**: the `ConfigPanel` (seed, ignition fires/hour,
   dronesPerBase 1–4, deep-outage %) and the `BlackoutStrip` render only in God Mode.
@@ -302,14 +354,18 @@ drone's *heading* along its sweep).
 - **vitest** (17 tracked files, all headless): sim season/detection/crash
   (`world`), autonomy, comms (dark fraction, 32-min cadence, 3-min retry, docked
   hard-line, gossip, belief isolation, staleness, sweep dead-reckoning incl. heading,
-  extinguished-fire reporting), merge rules, directives/queue/executors,
+  extinguished-fire reporting, **operator scan-sector redefinition sync** — upload,
+  comms-gated download, restore-default), merge rules, directives/queue/executors,
   land-clipped scan coverage + `headingAtDistance`,
-  scan sectors, kinematics, config burn, geo round-trip, ignition, rng, simRunner.
+  scan sectors, scan-zone overlay (**`scanRect` overrides the fixed sector**),
+  kinematics, config burn, geo round-trip, ignition, rng, simRunner.
   One of those files is the seeded full-season behavior harness
   `src/sim/e2e_behavior.test.ts` (belief lag, MISSING-requires-deep-outage
   regression, determinism, crash freeze, forced RTB, gossip range).
 - **Playwright** (`e2e/smoke.spec.ts`): builds + previews on `:4173` (chromium
-  swiftshader), loads the app, asserts the map canvas + 8 `.fleet-row`, sets ×1800,
+  swiftshader), loads the app, **dismisses the default-open About dialog** (which
+  would otherwise block tab/speed clicks), asserts the map canvas + 8 `.fleet-row`,
+  sets ×1800,
   polls `window.__SIM__.frameCount ≥ 1000`, confirms tick/frame/drone advance and
   toggles, and asserts **zero console/page errors**. (Fast-forward is ×1800 so the
   1000-frame bar is hit before the season ends on slow software WebGL.)
@@ -338,8 +394,11 @@ GeoJSON) and `build:hillshade` (DEM tiles → `geo/hillshade.webp`).
   per feature; this `DESIGN.md` is the stable reference — update it when the
   architecture changes.
 - **Drift from old plans to remember**: detection is **10 km** (not 50), fuel is
-  **2000 L / 2.8 L·min⁻¹**, scan sectors are **fixed per-drone**, sync retry is a
-  **constant 3 min** (not halving), MISSING is **76 min**. Console marker
+  **2000 L / 2.8 L·min⁻¹**, scan sectors **default fixed per-drone but are now
+  operator-redefinable** (`DroneTruth.patrolRect`, comms-gated — §6.5; the old "scan
+  sectors are fixed, not operator-drawn" framing is superseded), the boot seed is
+  **randomized per page load** (`BASE_CONFIG.seed 1337` is only the test default —
+  §5.2), sync retry is a **constant 3 min** (not halving), MISSING is **76 min**. Console marker
   brightness is now **one ramp**: `staleValue = 1 − stalenessFrac` off the sim's
   single `stalenessFrac = min(age/76, 1)` — so marks blacken exactly at MISSING
   (76 min), *not* the old fixed **/100** scale (`staleValue` no longer takes an
