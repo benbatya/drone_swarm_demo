@@ -28,6 +28,30 @@ describe('SimRunner', () => {
     expect(r.getStoreSnapshot().drones.length).toBe(12)
   })
 
+  it('playAtSpeed unpauses at the chosen speed', () => {
+    const r = new SimRunner(makeConfig())
+    expect(r.isRunning()).toBe(false)
+    r.playAtSpeed(180)
+    expect(r.isRunning()).toBe(true)
+    expect(r.getSpeed()).toBe(180)
+  })
+
+  it('playAtSpeed changes speed while already running', () => {
+    const r = new SimRunner(makeConfig())
+    r.playAtSpeed(30)
+    r.playAtSpeed(960)
+    expect(r.isRunning()).toBe(true)
+    expect(r.getSpeed()).toBe(960)
+  })
+
+  it('pause halts the sim but leaves the selected speed intact', () => {
+    const r = new SimRunner(makeConfig())
+    r.playAtSpeed(480)
+    r.pause()
+    expect(r.isRunning()).toBe(false)
+    expect(r.getSpeed()).toBe(480) // so the UI keeps highlighting Paused, not a speed
+  })
+
   it('exposes a per-drone blackout schedule', () => {
     const r = new SimRunner(makeConfig())
     const bo = r.getBlackout('redding-1')

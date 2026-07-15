@@ -157,6 +157,20 @@ export class SimRunner {
   }
 
   /**
+   * Set the playback speed and ensure the sim is running. The control bar's
+   * speed buttons are exclusive with the paused state, so picking a speed is
+   * also how the operator unpauses.
+   */
+  playAtSpeed(n: number): void {
+    if (this.running) {
+      this.setSpeed(n)
+    } else {
+      this.speed = n // start() rebuilds/emits with the new speed
+      this.start()
+    }
+  }
+
+  /**
    * Operator input: queue a pending directive for a drone (the console pushes;
    * the drone downloads it at its next successful sync). issuedAt is stamped to
    * the current tick.

@@ -272,7 +272,9 @@ drone's *heading* along its sweep).
 - **God-Mode-only controls**: the `ConfigPanel` (seed, ignition fires/hour,
   dronesPerBase 1–4, deep-outage %) and the `BlackoutStrip` render only in God Mode.
   The User Console is purely observational + directive-issuing. `ControlBar`
-  (play/pause, speed, clock, score) is shared.
+  (clock, score, and a single **exclusive speed group** — `Paused` / ×1 / ×30 /
+  ×180 / ×480 / ×960 / ×1800; picking a speed unpauses at it via
+  `runner.playAtSpeed`, `Paused` halts) is shared.
 
 ## 10. Testing
 
