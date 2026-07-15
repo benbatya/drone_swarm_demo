@@ -1,5 +1,5 @@
 import { BASES, WORLD_H_M, WORLD_W_M, type SimConfig } from '../config'
-import { lngLatToMeters, type Vec2 } from '../geo'
+import { lngLatToMeters, type CellId, type Vec2 } from '../geo'
 import { makeRng } from '../rng'
 import { makeDroneBelief, type DroneBelief } from '../belief/droneBelief'
 import { makeCommsState, type DroneCommsState } from '../comms/blackout'
@@ -58,6 +58,12 @@ export interface DroneTruth {
 
   /** Directive ids aborted since last sync (reported to console in M3). */
   abortedIds: string[]
+
+  /** Cells this drone has extinguished since last sync, reported to the console
+   * at the next sync (then cleared) — mirrors `abortedIds`. */
+  dousedSinceSync: { cellId: CellId; at: number }[]
+  /** Running total of fires this drone has extinguished (reported telemetry). */
+  extinguishedTotal: number
 }
 
 function clampToWorld(v: Vec2): Vec2 {
@@ -111,6 +117,8 @@ export function createFleet(cfg: SimConfig): DroneTruth[] {
         autoPatrol: makeScanExec(rect, Infinity, home, cfg, 'horizontal'),
         autoExec: null,
         abortedIds: [],
+        dousedSinceSync: [],
+        extinguishedTotal: 0,
       })
     }
   }

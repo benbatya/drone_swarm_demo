@@ -76,6 +76,10 @@ describe('extinguish executor', () => {
     expect(w.fires.has(id)).toBe(false)
     expect(w.score.doused).toBe(1)
     expect(d.retardant).toBe(ret0 - 1)
+    // The extinguished cell is logged to report to the console at the next sync,
+    // and the running total (reported telemetry) incremented.
+    expect(d.dousedSinceSync.map((e) => e.cellId)).toContain(id)
+    expect(d.extinguishedTotal).toBe(1)
   })
 
   it('completes without a drop if the fire is already out', () => {

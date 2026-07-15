@@ -1,148 +1,141 @@
-# Land-clip the lawnmower scan path
+# Display extinguished-fire locations on the User Console (dark orange)
 
 ## Goal
 
-Drones on their lawnmower sweep currently fly the full rectangular sector,
-including the parts that sit over the Pacific (west-half sectors reach
-`x = 0`, the world's west/coastal edge). That wastes flight time scanning ocean
-the system isn't responsible for.
+Each drone tracks the fires it has extinguished since its last console sync and
+uploads those locations at sync; the **User Console** renders every extinguished
+fire location as a **dark-orange** marker.
 
-**Per the user's clarification:** the scan *area* stays a **rectangle** — we do
-**not** shrink `scanSectorFor`. Only the *path* changes: each lawnmower leg is
-clipped to the land portion of its row, so the sweep's turnarounds **follow the
-coastline (the boundary zone)** instead of running out to sea. Rows that are
-entirely ocean are dropped.
+## Key finding — the drones already track & upload this
 
-## Approach
+Doused fires *already* flow to the console over the existing sync channel:
 
-The single seam is **`buildLawnmower` in `src/sim/directives/scanExec.ts`** — the
-sole waypoint generator. It's called from four places that must stay
-byte-identical (the console dead-reckons a blacked-out drone by *rebuilding the
-same path*):
+1. A drone douses a fire in `extinguishExec.ts:35-42` → `markBeliefOut(d, cell,
+   now)` sets `believedOut = true` and `updatedAt = now` on the drone's own
+   belief entry.
+2. At the next successful sync, `uploadFires` (`sync.ts:26-30`) uploads every
+   belief entry with `updatedAt > lastSyncAt` — i.e. **exactly the fires
+   extinguished since last sync** — and `mergeFire` folds them into
+   `w.console.fires` with `believedOut` preserved (out-wins monotonic).
+3. `buildConsoleView` (`snapshot.ts:281-289`) then **skips** them:
+   `if (kf.believedOut) continue`.
 
-- `scanExec.ts` `makeScanExec` (initial) and `stepScan` (rebuild on each re-cover)
-- `src/sim/snapshot.ts:220` (console ghost reconstruction)
-- `src/ui/map/scanZones.ts:57` (map hatch preview)
+So the "track since last sync + upload" mechanism the request describes is
+already implemented via the belief's `updatedAt`/`believedOut` delta — the only
+thing missing is **surfacing and rendering** those believed-out fires. This is
+also faithful to the sim's C2 premise: the markers are drone-*reported* (gated
+by comms/blackouts), not omniscient truth.
 
-Because all four call the same pure function with the same `(rect, spacing,
-orientation)`, making `buildLawnmower` itself land-aware keeps every call site
-consistent automatically — **no call-site changes, no signature change.**
+## Recommended approach — Option A (reuse the believed-out flow)
 
-### 1. New land helper — `src/sim/land.ts`
+Minimal, reuses tested sync/merge, and outcome-correct ("all extinguished fires
+the console has heard about"). Three small changes:
 
-Add one exported function that keeps land logic in the land layer:
+### 1. Snapshot — surface extinguished fires (`src/sim/snapshot.ts`)
+- Add `extinguishedFires: FireView[]` to `ConsoleView` (lines 92-95).
+- In `buildConsoleView`'s fire loop (lines 281-289), instead of `continue` on
+  `believedOut`, route those entries into a second list:
+  ```ts
+  const fires: FireView[] = []
+  const extinguishedFires: FireView[] = []
+  for (const kf of w.console.fires.values()) {
+    const c = cellCenter(kf.cellId)
+    const ll = metersToLngLat(c.x, c.y)
+    const view = { cellId: kf.cellId, position: [ll.lng, ll.lat], ignitedAt: kf.firstSeenAt }
+    ;(kf.believedOut ? extinguishedFires : fires).push(view)
+  }
+  return { drones, fires, extinguishedFires }
+  ```
+  (or reuse the existing `firesToViews` helper split by `believedOut`).
 
-```ts
-/**
- * Outer on-land extent along `axis` at the fixed cross-coordinate `across`,
- * within [from, to] (meters). Returns [lo, hi] hugging the coastline, or null
- * if the whole span is water. Fails OPEN: if land data didn't load, returns
- * [from, to] (same fallback philosophy as isOnLand).
- */
-export function landExtentAlongAxis(
-  axis: 'x' | 'y',
-  across: number,
-  from: number,
-  to: number,
-): [number, number] | null
-```
+### 2. Console rendering — dark-orange layer (`src/ui/map/consoleLayers.ts`)
+- Add a sibling `ScatterplotLayer<FireView>` right after `console-fires`
+  (lines 39-53):
+  ```ts
+  new ScatterplotLayer<FireView>({
+    id: 'console-extinguished',
+    data: cv.extinguishedFires,
+    getPosition: (d) => d.position,
+    getRadius: 4,
+    radiusUnits: 'pixels',
+    radiusMinPixels: 2.5,
+    getFillColor: [204, 102, 0, 210], // dark orange (same hue family as the
+                                      // [255,120,40] active-fire orange, lower value)
+  })
+  ```
+  Draw it **beneath** `console-fires` (push before it) so a re-ignited active
+  fire dot sits on top of a stale extinguished marker at the same cell. Not
+  pickable (no selection semantics for out fires).
 
-Implementation — **march + bisection**, reusing the existing `isOnLand`:
-- If `POLYS.length === 0` → return `[from, to]` (fail open).
-- Step from `from` to `to` in fine increments (recommend `detectionRadiusM / 2`,
-  ~5 km; sectors are 90–220 km so this is ~20–45 samples/row, cheap). Build a
-  point via `axis === 'x' ? {x:t, y:across} : {x:across, y:t}` and test
-  `isOnLand`. (The step needs `detectionRadiusM`; either pass it in or add a
-  `landExtentAlongAxis(axis, across, from, to, step)` param so `land.ts` stays
-  config-free.)
-- Record the first (`lo0`) and last (`hi0`) on-land sample. If none → `null`.
-- **Bisection-refine** the two coast crossings to ~100 m: between the water
-  sample just before `lo0` and `lo0`, and between `hi0` and the water sample
-  just after, ~8 iterations each. This puts the turnaround right on the coast.
-- Return `[loRefined, hiRefined]`.
+### 3. Types
+- `FireView` (`snapshot.ts:56-60`) is reused as-is. No new comms/belief types.
 
-This reuses the tested `isOnLand` rather than adding new polygon-intersection
-math. (Alternative, if we later want exact multi-span precision: analytic
-scanline over `POLYS` outer rings minus holes. Not needed for the coastal case —
-each of these rows is a single land span with the ocean on the west.)
+## Alternative — Option B (explicit per-drone delta)
 
-### 2. Land-clip `buildLawnmower` — `src/sim/directives/scanExec.ts`
+Mirror `abortedIds` literally: add `dousedSinceSync: {cellId, at}[]` to
+`DroneTruth` (init in `createFleet`), push at the douse site
+(`extinguishExec.ts:41`), add a `dousedFires` map to `ConsoleBelief`, upload it
+in a new `uploadDoused` from `stepSync`, clear it in `reconcilePending`, then
+surface + render as in Option A. More code and a second channel for data that
+already flows via `uploadFires`. Only worth it if we later need to attribute an
+extinguished marker to a specific drone or distinguish self-doused from
+gossip-learned-out — the console display itself doesn't need either.
 
-Rework the row loop to clip each row's leg and drop ocean-only rows:
+**Recommendation: Option A.** It satisfies both halves of the request (delta
+upload since last sync + console display) by exposing data that already arrives,
+and avoids a redundant telemetry channel.
 
-```ts
-const along = horizontal ? 'x' : 'y'
-const rows: { across: number; lo: number; hi: number }[] = []
-for (let k = 0; k <= n; k++) {
-  const across = Math.min(acrossMin + k * spacing, acrossMax)
-  const span = landExtentAlongAxis(along, across, alongMin, alongMax, step)
-  if (span) rows.push({ across, lo: span[0], hi: span[1] })
-}
-```
+## Dark orange
 
-Then stitch a **boustrophedon over the kept rows only**, alternating by
-kept-row index and joining each new row from the end nearest the previous row's
-last point (so turnarounds stay short and the polyline stays contiguous):
-
-- Row 0: emit `lo → hi` (as `{along, across}` points).
-- Row i>0: start from whichever of `{lo, hi}` is nearer the previous emitted
-  point; emit that end → the other end.
-
-Keep the existing entry-proximity `reverse()` at the end (unchanged) — it still
-orients the whole path toward `entry`, and the heading-derived direction fix in
-`snapshot.ts` still applies.
-
-**Fallback / guards:**
-- If **no** row has land (`rows.length === 0`) — shouldn't happen for the real
-  bases, but defensively rebuild the **full rectangle path** (current behavior)
-  so `stepScan` never indexes an empty `waypoints` array. Mirrors the fail-open
-  stance.
-- A single land span per row is assumed (outer extent). A large bay would be
-  overflown rather than woven into — acceptable and arguably desirable at this
-  scale; noted as a known simplification.
-
-### 3. Performance / caching
-
-`buildLawnmower` is now heavier (dozens of `isOnLand` ray-casts) and
-`snapshot.ts` may rebuild it per emit for each disconnected scanning drone.
-The result is deterministic in `(rect, spacing, orientation)`, so **memoize** by
-a key of those three (small `Map` in `scanExec.ts`). This keeps the console ghost
-path cheap and — because it's the same function — identical across call sites.
-(If we skip caching initially, correctness is unchanged; add it if profiling
-shows cost.)
+`[204, 102, 0]` (≈ `#CC6600`) — same orange hue family as the active-fire
+`[255, 120, 40]`, darker (lower value), so "out" reads as a dimmed ember. Alpha
+`210` to match the other fire dots. (Exact shade easy to tweak.)
 
 ## Tests
 
-- **Update** `src/sim/directives/scanExec.test.ts` `maxGap` (L44–49): it asserts
-  *every* rect point is within detection radius of the path — no longer true for
-  ocean points. Re-scope to "every **on-land** rect point is within detection
-  radius," reusing `isOnLand` like `ignition.test.ts:43-52`.
-- **New** test: no waypoint lies in the ocean — every `buildLawnmower` waypoint
-  satisfies `isOnLand` (within a small coast tolerance), for a known coastal
-  sector (a west-half `scanSectorFor` id).
-- **New** test: `landExtentAlongAxis` returns `null` for an all-ocean row and a
-  sensible `[lo, hi]` for a coastal row.
-- **Keep** `scanSectors.test.ts` unchanged — sectors still tile to the borders
-  (we did not touch `scanSectorFor`).
-- Sanity-check the dead-reckoning tests in `comms.test.ts` still pass (the ghost
-  now follows a coast-clipped path, but the assertions are direction/coverage
-  based, not exact-rectangle based).
+- **Snapshot**: mirror `comms.test.ts` "belief isolation" — seed a
+  `believedOut` fire into `w.console.fires`, `buildSnapshot`, assert it appears
+  in `snap.console.extinguishedFires` (with the right lng/lat) and **not** in
+  `snap.console.fires`.
+- **End-to-end sim**: mirror `directives.test.ts` "extinguish executor" + a sync
+  — set a fire, drone douses it, `tickWorld`/`stepSync` past a sync, assert the
+  cell shows up in `snap.console.extinguishedFires`.
+- **Active vs out**: a live (not believed-out) fire stays in `snap.console.fires`
+  only.
+- E2E smoke stays zero-console-error (new layer must not fetch anything).
 
 ## Verification
 
-1. `npm run build && npm test && npm run test:e2e` (e2e must stay zero-console-error).
-2. `npm run dev` and eyeball a west-coast drone (e.g. a Redding/Weed odd-index
-   drone): its sweep turnarounds should ride the coastline, no legs out over the
-   blue ocean; the sector rectangle overlay is unchanged.
+1. `npm run build && npm test && npm run test:e2e`.
+2. `npm run dev`, User Console tab: run the sim until drones douse fires, confirm
+   dark-orange dots appear at doused cells (active fires stay bright orange), and
+   that they're gated by sync (won't appear for a drone still in a blackout).
 3. Restart the dev server as the final step.
 
-## Open questions
+## Decision — CHOSEN: Option B (explicit per-drone delta)
 
-- **Coastal margin:** clip exactly at the coast, or leave a small inland/offshore
-  margin (e.g. keep legs `detectionRadiusM` short of the water so the detection
-  disc doesn't spill offshore)? Default plan: clip exactly at the coast — the
-  detection disc naturally covers the shoreline. Easy to add a margin if desired.
-- **Bays:** outer-extent clipping overflies large bays (single span per row). Fine
-  for the demo? Or split into multiple on-land spans per row (more code, gaps in
-  the polyline the helpers must tolerate)? Default: single span.
-- **Caching:** ship the memo in v1, or add only if profiling shows it matters?
+Implement the explicit per-drone `dousedSinceSync` channel that mirrors
+`abortedIds`:
+
+1. `DroneTruth.dousedSinceSync: { cellId: CellId; at: number }[]` — new field,
+   init `[]` in `createFleet` (`drone.ts`).
+2. Push `{ cellId: exec.cellId, at: now }` at the real douse site
+   (`extinguishExec.ts:41`, where this drone drops retardant and extinguishes —
+   not the peer-"already out" path).
+3. `ConsoleBelief.extinguished: Map<CellId, ExtinguishedFire>` where
+   `ExtinguishedFire = { cellId, extinguishedAt, extinguishedBy }`
+   (`consoleBelief.ts`), init in `makeConsoleBelief`.
+4. `uploadDoused(console, d, now)` in `sync.ts`: fold each `d.dousedSinceSync`
+   entry into `w.console.extinguished` (keyed by cellId, `extinguishedBy = d.id`).
+   Call it from `stepSync` beside `uploadFires`; clear `d.dousedSinceSync` in
+   `reconcilePending` (`d.dousedSinceSync.length = 0`).
+5. Snapshot: `ExtinguishedFireView { cellId, position, extinguishedAt }`, added to
+   `ConsoleView.extinguishedFires`, built from `w.console.extinguished`.
+6. Render: a `ScatterplotLayer` in `consoleLayers.ts` drawn beneath
+   `console-fires`, colored with the **extinguishing drone's identity hue** at
+   `hsvToRgb(hue, 1, 0.5)` (saturation 1, value 0.5) — the view carries that
+   drone's `hue` (looked up by `extinguishedBy`). Known/active fires keep their
+   existing `[255,120,40]` orange.
+
+Union across drones covers every doused fire (each is doused by exactly one
+drone, which records it), so the console shows all extinguished locations.

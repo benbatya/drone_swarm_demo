@@ -164,6 +164,61 @@ describe('belief isolation', () => {
   })
 })
 
+describe('extinguished-fire reporting', () => {
+  it('uploads doused cells to the console at sync and surfaces them for rendering', () => {
+    const w = createWorld(cfg0())
+    const d = w.drones[0]
+    d.comms.darkWindows = [] // always connected
+    d.comms.nextSyncAt = 1
+    d.comms.lastSyncAt = -Infinity
+    // Two fires this drone extinguished since its last sync.
+    d.dousedSinceSync = [
+      { cellId: 4321, at: 3 },
+      { cellId: 8765, at: 4 },
+    ]
+    d.extinguishedTotal = 2 // running total reported in telemetry
+    w.tick = 5
+    stepSync(w)
+
+    // Console logged both, attributed to this drone.
+    expect(w.console.extinguished.get(4321)).toMatchObject({
+      cellId: 4321,
+      extinguishedBy: d.id,
+      extinguishedAt: 3,
+    })
+    expect(w.console.extinguished.get(8765)?.extinguishedBy).toBe(d.id)
+    // Delta consumed so it isn't re-reported next sync.
+    expect(d.dousedSinceSync).toEqual([])
+
+    // Surfaced to the console view (what the User Console renders).
+    const snap = buildSnapshot(w, { running: true, speed: 1, version: 1, seasonComplete: false })
+    const cells = snap.console.extinguishedFires.map((e) => e.cellId)
+    expect(cells).toContain(4321)
+    expect(cells).toContain(8765)
+    // Each extinguished marker carries the extinguishing drone's identity hue.
+    const droneView = snap.console.drones.find((dv) => dv.id === d.id)!
+    expect(snap.console.extinguishedFires.find((e) => e.cellId === 4321)!.hue).toBe(droneView.hue)
+    // The drone's per-drone state shows its reported running extinguished total.
+    expect(droneView.extinguishedCount).toBe(2)
+  })
+
+  it('does not report a doused cell while the drone is blacked out', () => {
+    const w = createWorld(cfg0())
+    const d = w.drones[0]
+    d.comms.darkWindows = alwaysDark()
+    d.comms.cursor = 0
+    d.comms.nextSyncAt = 1
+    d.comms.lastSyncAt = -Infinity
+    d.dousedSinceSync = [{ cellId: 4321, at: 3 }]
+    w.tick = 5
+    stepSync(w)
+
+    // No contact → nothing logged, and the delta is kept for the next sync.
+    expect(w.console.extinguished.size).toBe(0)
+    expect(d.dousedSinceSync).toHaveLength(1)
+  })
+})
+
 describe('console staleness derivation', () => {
   function snapWithAge(age: number): GroundTruth {
     const w = createWorld(cfg0())
@@ -179,6 +234,7 @@ describe('console staleness derivation', () => {
       queueLen: 0,
       scanning: false,
       scanOrientation: 'horizontal',
+      extinguishedTotal: 0,
     }
     w.tick = 1000
     rec.lastContactAt = 1000 - age
@@ -219,6 +275,7 @@ describe('sweep-following dead reckoning under blackout', () => {
       queueLen: 0,
       scanning,
       scanOrientation: 'horizontal',
+      extinguishedTotal: 0,
     }
     w.tick = 1000
     rec.lastContactAt = 1000 - 60 // 60 min blackout
@@ -258,6 +315,7 @@ describe('sweep-following dead reckoning under blackout', () => {
       queueLen: 0,
       scanning: true,
       scanOrientation: 'horizontal',
+      extinguishedTotal: 0,
     }
     const age = 40
     w.tick = 1000
@@ -319,6 +377,7 @@ describe('sweep-following dead reckoning under blackout', () => {
       queueLen: 0,
       scanning: true,
       scanOrientation: 'horizontal',
+      extinguishedTotal: 0,
     }
     const age = 5 // short gap: the ghost stays on this leg
     w.tick = 1000
