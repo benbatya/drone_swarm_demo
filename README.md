@@ -18,6 +18,13 @@ literal:
 Watch a blackout roll in and the console's picture drift away from the truth — then snap
 back when the drone reconnects. That divergence is the whole point.
 
+## Live demo
+
+**▶ [Try it in your browser](https://benbatya.github.io/drone_swarm_demo/)** — no install,
+runs fully client-side (offline basemap, no tiles or keys).
+
+[![Fire Season — Drone Swarm C2: the User Console tab showing believed drone state, per-drone scan zones, contact-age/staleness cues, and the directive composer](Screenshot.png)](https://benbatya.github.io/drone_swarm_demo/)
+
 ## Quick start
 
 ```bash
