@@ -19,14 +19,14 @@ describe('hsvToRgb', () => {
 })
 
 describe('staleValue', () => {
-  it('is full when fresh and drops 1/min (0–100 scale) while blacked out', () => {
-    expect(staleValue(0)).toBe(1) // just synced
-    expect(staleValue(40)).toBeCloseTo(0.6) // 40 min dark → value 60
-    expect(staleValue(100)).toBe(0) // 100 min dark → black
-    expect(staleValue(250)).toBe(0) // floored
+  it('is the inverse of the staleness fraction', () => {
+    expect(staleValue(0)).toBe(1) // fresh (just synced)
+    expect(staleValue(0.4)).toBeCloseTo(0.6) // 40% toward MISSING
+    expect(staleValue(1)).toBe(0) // MISSING → black
   })
 
-  it('is 0 when never contacted', () => {
-    expect(staleValue(null)).toBe(0)
+  it('clamps out-of-range fractions', () => {
+    expect(staleValue(1.5)).toBe(0) // never-contacted / past MISSING → black
+    expect(staleValue(-0.2)).toBe(1) // clamped to full brightness
   })
 })

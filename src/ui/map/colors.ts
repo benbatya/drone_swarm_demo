@@ -23,14 +23,14 @@ export function hsvToRgb(h: number, s: number, v: number): RGB {
 }
 
 /**
- * Console brightness (HSV value) derived from contact age. Full (1.0) when
- * fresh, then dropping by 1-per-minute on a 0–100 scale (i.e. −0.01/min) for
- * every minute a drone is blacked out, floored at 0 (black). A successful sync
- * resets contact age to 0, restoring the value to maximum.
+ * Console brightness (HSV value) derived from the staleness fraction — the same
+ * 0 (fresh) → 1 (MISSING) ramp `snapshot.ts` computes against the MISSING
+ * threshold, so the marker fades to black exactly as the drone trips MISSING.
+ * Brightness is simply its inverse; a successful sync resets the fraction to 0,
+ * restoring full brightness. Never-contacted drones arrive with frac 1 (black).
  */
-export function staleValue(contactAgeMin: number | null): number {
-  if (contactAgeMin == null) return 0
-  return Math.max(0, 1 - contactAgeMin / 100)
+export function staleValue(stalenessFrac: number): number {
+  return 1 - Math.min(Math.max(stalenessFrac, 0), 1)
 }
 
 export const rgbCss = ([r, g, b]: RGB): string => `rgb(${r}, ${g}, ${b})`
