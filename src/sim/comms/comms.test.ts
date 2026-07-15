@@ -5,6 +5,7 @@ import {
   headingAtDistance,
   nearestArcLength,
   pathLength,
+  pointAtDistance,
   sweepSpacingM,
 } from '../directives/scanExec'
 import { scanSectorFor } from '../drones/scanSectors'
@@ -276,5 +277,62 @@ describe('sweep-following dead reckoning under blackout', () => {
     expect(view.heading).toBeCloseTo(headingAtDistance(path, s), 5)
     // ...and is no longer frozen at the reported heading.
     expect(view.heading).not.toBeCloseTo(0.5, 2)
+  })
+
+  it('dead-reckons forward when the last fix was on the second half of a sweep', () => {
+    // Regression: the console reconstructs the sweep with buildLawnmower(entry =
+    // rep.pos). buildLawnmower flips the whole path when the entry is nearer the
+    // far endpoint, so a fix taken past the pass midpoint yields a REVERSED path.
+    // A blind +dist step then runs the ghost — and its heading — backwards along
+    // the scan. The dead-reckoner must instead derive travel direction from the
+    // reported heading. (Only "sometimes": exactly when disconnected on the
+    // returning half of a leg.)
+    const w = createWorld(cfg0())
+    const cfg = w.cfg
+    const rect = scanSectorFor('redding-1')!
+    // Take a real fix on the SECOND half of the true sweep: build the path the
+    // drone actually flies (entry at the sector's start corner), then sample a
+    // mid-leg point past the midpoint. Its tangent is the drone's true heading.
+    const truePath = buildLawnmower(
+      rect,
+      { x: rect.minX, y: rect.minY },
+      sweepSpacingM(cfg),
+      'horizontal',
+    )
+    const strue = 0.54 * pathLength(truePath)
+    const pos = pointAtDistance(truePath, strue)
+    const trueHeading = headingAtDistance(truePath, strue)
+
+    const rec = w.console.drones.get('redding-1')!
+    rec.reported = {
+      pos: { x: pos.x, y: pos.y },
+      heading: trueHeading,
+      fuelL: 500,
+      retardant: 5,
+      status: 'airborne',
+      forcedRtb: false,
+      currentDirectiveKind: null,
+      queueLen: 0,
+      scanning: true,
+      scanOrientation: 'horizontal',
+    }
+    const age = 5 // short gap: the ghost stays on this leg
+    w.tick = 1000
+    rec.lastContactAt = 1000 - age
+    const view = buildSnapshot(w, {
+      running: true,
+      speed: 1,
+      version: 1,
+      seasonComplete: false,
+    }).console.drones.find((d) => d.id === 'redding-1')!
+
+    // The ghost must advance IN the direction the drone was flying, not against
+    // it: displacement from the last fix agrees with the reported heading.
+    const ghost = lngLatToMeters(view.ghostPosition![0], view.ghostPosition![1])
+    const disp = { x: ghost.x - pos.x, y: ghost.y - pos.y }
+    const headingVec = { x: Math.sin(trueHeading), y: Math.cos(trueHeading) }
+    expect(disp.x * headingVec.x + disp.y * headingVec.y).toBeGreaterThan(0)
+    // And the ghost heading points forward too, not 180° reversed.
+    expect(Math.cos(view.heading! - trueHeading)).toBeGreaterThan(0)
   })
 })

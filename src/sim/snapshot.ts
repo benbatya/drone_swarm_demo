@@ -225,12 +225,24 @@ function buildConsoleView(w: GroundTruth): ConsoleView {
         )
         const len = pathLength(path)
         if (len > 0) {
-          const s = (nearestArcLength(path, rep.pos) + dist) % len
+          const s0 = nearestArcLength(path, rep.pos)
+          // buildLawnmower's entry-proximity reversal orients the reconstructed
+          // path off rep.pos (a mid-sweep point), which is unrelated to the way
+          // the drone was actually flying — so past the pass midpoint the path
+          // comes back reversed and a blind +dist step runs the ghost backwards.
+          // Derive the true travel direction from the reported heading instead:
+          // step whichever way agrees with it, and flip the ghost heading to
+          // match when we're walking the path against its local tangent.
+          const aligned = Math.cos(rep.heading - headingAtDistance(path, s0)) >= 0
+          const dir = aligned ? 1 : -1
+          const s = (((s0 + dir * dist) % len) + len) % len
           const p = pointAtDistance(path, s)
           ghostX = p.x
           ghostY = p.y
           // Orientation follows the sweep's local direction at the ghost point.
-          ghostHeading = headingAtDistance(path, s)
+          ghostHeading = aligned
+            ? headingAtDistance(path, s)
+            : headingAtDistance(path, s) + Math.PI
         } else {
           ghostX = rep.pos.x + Math.sin(rep.heading) * dist
           ghostY = rep.pos.y + Math.cos(rep.heading) * dist
