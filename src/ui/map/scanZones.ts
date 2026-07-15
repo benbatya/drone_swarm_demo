@@ -3,6 +3,7 @@ import { PathLayer, PolygonLayer } from '@deck.gl/layers'
 import { BASES, makeConfig } from '../../sim/config'
 import { buildLawnmower, sweepSpacingM } from '../../sim/directives/scanExec'
 import { parseDroneId, scanSectorFor } from '../../sim/drones/scanSectors'
+import type { ScanOrientation } from '../../sim/directives/types'
 import { lngLatToMeters, metersToLngLat } from '../../sim/geo'
 import { hsvToRgb, type RGB } from './colors'
 
@@ -23,6 +24,12 @@ const toLL = (x: number, y: number): LL => {
 export interface ScanDrone {
   id: string
   hue: number
+  /**
+   * Current sweep orientation — hatches are drawn to match it (the live drone
+   * alternates H↔V as it completes passes). Omit / null to fall back to the
+   * sector's default sweep (e.g. a never-contacted console drone).
+   */
+  scanOrientation?: ScanOrientation | null
 }
 interface ZoneDatum {
   hue: number
@@ -41,9 +48,12 @@ function zoneFor(d: ScanDrone): ZoneDatum | null {
   ]
   const base = BASES.find((b) => b.id === parseDroneId(d.id)?.baseId)
   const entry = base ? lngLatToMeters(base.lng, base.lat) : { x: rect.minX, y: rect.minY }
-  // Preview shows the sector's default (horizontal) sweep; the live drone
-  // alternates H/V as it completes passes.
-  const orientation = rect.maxX - rect.minX >= rect.maxY - rect.minY ? 'horizontal' : 'vertical'
+  // Hatches follow the drone's CURRENT sweep orientation so the preview flips
+  // H↔V in step with the drone as it completes passes. With no live orientation
+  // (a never-contacted console drone) fall back to the sector's default sweep.
+  const defaultOrientation: ScanOrientation =
+    rect.maxX - rect.minX >= rect.maxY - rect.minY ? 'horizontal' : 'vertical'
+  const orientation = d.scanOrientation ?? defaultOrientation
   const path: LL[] = buildLawnmower(rect, entry, PREVIEW_SPACING_M, orientation).map((w) =>
     toLL(w.x, w.y),
   )
