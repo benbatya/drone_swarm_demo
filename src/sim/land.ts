@@ -86,3 +86,59 @@ export function isOnLand(p: Vec2): boolean {
   }
   return false
 }
+
+/** Bisect toward the coastline between a known water and land sample; returns a
+ * point on the LAND side, within ~1/256 of the initial gap of the true coast. */
+function refineToCoast(at: (t: number) => Vec2, water: number, land: number): number {
+  let w = water
+  let l = land
+  for (let i = 0; i < 8; i++) {
+    const mid = (w + l) / 2
+    if (isOnLand(at(mid))) l = mid
+    else w = mid
+  }
+  return l
+}
+
+/**
+ * Outer on-land extent along `axis` at the fixed cross-coordinate `across`,
+ * searched within `[from, to]` (meters) by sampling every `step` meters and
+ * refining the two coastline crossings by bisection. Returns `[lo, hi]` with
+ * both endpoints on land (hugging the coast), or `null` if the whole span is
+ * water. Used to clip a lawnmower leg to the land it should actually scan.
+ *
+ * Fails OPEN: if the land polygon failed to load, returns `[from, to]` so
+ * scanning is not silently disabled. Takes the outer extent — a single span
+ * from the first to the last on-land sample — so a bay in the middle of a row
+ * is overflown rather than woven into (deliberate at this scale).
+ */
+export function landExtentAlongAxis(
+  axis: 'x' | 'y',
+  across: number,
+  from: number,
+  to: number,
+  step: number,
+): [number, number] | null {
+  if (POLYS.length === 0) return [from, to]
+  const at = (t: number): Vec2 => (axis === 'x' ? { x: t, y: across } : { x: across, y: t })
+
+  // Sample positions across the span (inclusive of both ends).
+  const ts: number[] = []
+  for (let t = from; t < to; t += step) ts.push(t)
+  ts.push(to)
+
+  let firstIdx = -1
+  let lastIdx = -1
+  for (let i = 0; i < ts.length; i++) {
+    if (isOnLand(at(ts[i]))) {
+      if (firstIdx === -1) firstIdx = i
+      lastIdx = i
+    }
+  }
+  if (firstIdx === -1) return null // entirely water
+
+  const lo = firstIdx > 0 ? refineToCoast(at, ts[firstIdx - 1], ts[firstIdx]) : ts[firstIdx]
+  const hi =
+    lastIdx < ts.length - 1 ? refineToCoast(at, ts[lastIdx + 1], ts[lastIdx]) : ts[lastIdx]
+  return [lo, hi]
+}

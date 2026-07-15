@@ -269,14 +269,18 @@ describe('sweep-following dead reckoning under blackout', () => {
       seasonComplete: false,
     }).console.drones.find((d) => d.id === 'redding-1')!
 
-    // Reconstruct the expected sweep tangent at the dead-reckoned arc-length.
+    // The reconstructed sweep is axis-aligned; the ghost heading should track the
+    // local leg direction at the ghost's position (parallel or anti-parallel —
+    // the dead-reckoner picks travel direction from the reported heading), not
+    // stay frozen at the arbitrary reported 0.5.
     const cfg = w.cfg
     const path = buildLawnmower(rect, pos, sweepSpacingM(cfg), 'horizontal')
-    const s = (nearestArcLength(path, pos) + cfg.speedMPerMin * age) % pathLength(path)
-    // Heading follows the reconstructed sweep direction...
-    expect(view.heading).toBeCloseTo(headingAtDistance(path, s), 5)
-    // ...and is no longer frozen at the reported heading.
-    expect(view.heading).not.toBeCloseTo(0.5, 2)
+    const ghost = lngLatToMeters(view.ghostPosition![0], view.ghostPosition![1])
+    const tangent = headingAtDistance(path, nearestArcLength(path, ghost))
+    // Heading is parallel (mod π) to the sweep leg at the ghost point...
+    expect(Math.abs(Math.sin(view.heading! - tangent))).toBeLessThan(1e-3)
+    // ...and no longer frozen at the reported heading.
+    expect(Math.abs(Math.sin(view.heading! - 0.5))).toBeGreaterThan(0.1)
   })
 
   it('dead-reckons forward when the last fix was on the second half of a sweep', () => {

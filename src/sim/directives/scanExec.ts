@@ -1,6 +1,7 @@
 import type { SimConfig } from '../config'
 import type { Vec2 } from '../geo'
 import { distance } from '../geo'
+import { landExtentAlongAxis } from '../land'
 import { moveToward } from '../drones/kinematics'
 import type { DroneTruth } from '../drones/drone'
 import type { GroundTruth } from '../world'
@@ -12,14 +13,49 @@ export function sweepSpacingM(cfg: SimConfig): number {
 }
 
 /**
- * Boustrophedon (lawnmower) waypoints covering `rect`, sweeping parallel to the
- * chosen axis, spaced so every rect point falls within detection range of the
- * path. `orientation` picks the leg direction (horizontal = long legs along x).
- * Entry is from whichever end is nearest `entry`.
+ * Memoized land-clipped sweeps, keyed by (rect, spacing, orientation). The
+ * clipped shape is deterministic in those three, and re-derived on every sweep
+ * re-cover plus by the console's blackout dead-reckoner and the map preview, so
+ * caching keeps those cheap and guarantees they stay byte-identical to truth.
+ */
+const lawnmowerCache = new Map<string, Vec2[]>()
+
+/**
+ * Boustrophedon (lawnmower) waypoints covering the LAND within `rect`, sweeping
+ * parallel to the chosen axis and spaced so every on-land point falls within
+ * detection range of the path. Each leg is clipped to its row's on-land span so
+ * the sweep's turnarounds follow the coastline rather than running out over the
+ * ocean; rows that are entirely water are dropped. If `rect` holds no land at
+ * all, the full rectangle is swept (fail-open — see land.ts). `orientation`
+ * picks the leg direction (horizontal = long legs along x); entry is from
+ * whichever end is nearest `entry`.
  */
 export function buildLawnmower(
   rect: RectM,
   entry: Vec2,
+  spacing: number,
+  orientation: ScanOrientation,
+): Vec2[] {
+  const key = `${rect.minX},${rect.minY},${rect.maxX},${rect.maxY}|${spacing}|${orientation}`
+  let base = lawnmowerCache.get(key)
+  if (!base) {
+    base = buildLawnmowerBase(rect, spacing, orientation)
+    lawnmowerCache.set(key, base)
+  }
+  // Orient toward `entry`: start from whichever end of the fixed path is nearer.
+  // Return a fresh array either way so callers never mutate the cached base.
+  if (
+    base.length > 1 &&
+    distance(entry, base[0]) > distance(entry, base[base.length - 1])
+  ) {
+    return base.slice().reverse()
+  }
+  return base.slice()
+}
+
+/** The land-clipped sweep in its canonical (pre-entry-orientation) direction. */
+function buildLawnmowerBase(
+  rect: RectM,
   spacing: number,
   orientation: ScanOrientation,
 ): Vec2[] {
@@ -30,19 +66,44 @@ export function buildLawnmower(
   const alongMax = horizontal ? rect.maxX : rect.maxY
 
   const n = Math.max(1, Math.ceil((acrossMax - acrossMin) / spacing))
-  const pts: Vec2[] = []
+  const axis: 'x' | 'y' = horizontal ? 'x' : 'y'
+  const clipStep = spacing / 4 // ≈ detection radius / 2 — fine enough to find the coast
+  const mk = (along: number, across: number): Vec2 =>
+    horizontal ? { x: along, y: across } : { x: across, y: along }
+
+  // One land-clipped leg per row, dropping rows that are entirely water.
+  const rows: { across: number; lo: number; hi: number }[] = []
   for (let k = 0; k <= n; k++) {
     const across = Math.min(acrossMin + k * spacing, acrossMax)
-    const ends = k % 2 === 0 ? [alongMin, alongMax] : [alongMax, alongMin]
-    for (const along of ends) {
-      pts.push(horizontal ? { x: along, y: across } : { x: across, y: along })
-    }
+    const span = landExtentAlongAxis(axis, across, alongMin, alongMax, clipStep)
+    if (span) rows.push({ across, lo: span[0], hi: span[1] })
   }
-  if (
-    pts.length > 1 &&
-    distance(entry, pts[0]) > distance(entry, pts[pts.length - 1])
-  ) {
-    pts.reverse()
+
+  // Fail-open: a rect with no land at all sweeps the full rectangle (the prior
+  // behavior) so stepScan never faces an empty waypoint list.
+  if (rows.length === 0) {
+    const pts: Vec2[] = []
+    for (let k = 0; k <= n; k++) {
+      const across = Math.min(acrossMin + k * spacing, acrossMax)
+      const ends = k % 2 === 0 ? [alongMin, alongMax] : [alongMax, alongMin]
+      for (const along of ends) pts.push(mk(along, across))
+    }
+    return pts
+  }
+
+  // Boustrophedon over the kept rows: begin each row from the end nearest the
+  // previous row's exit so turnarounds stay short and the polyline contiguous.
+  const pts: Vec2[] = []
+  let prev: Vec2 | null = null
+  for (const { across, lo, hi } of rows) {
+    const a: Vec2 = mk(lo, across)
+    const b: Vec2 = mk(hi, across)
+    // Start this row from whichever end is nearer the previous row's exit.
+    const nearB: boolean = prev !== null && distance(prev, b) < distance(prev, a)
+    const first: Vec2 = nearB ? b : a
+    const second: Vec2 = nearB ? a : b
+    pts.push(first, second)
+    prev = second
   }
   return pts
 }

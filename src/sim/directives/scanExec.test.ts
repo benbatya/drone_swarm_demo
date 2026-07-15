@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { makeConfig } from '../config'
 import type { Vec2 } from '../geo'
+import { isOnLand, landExtentAlongAxis } from '../land'
 import {
   buildLawnmower,
   headingAtDistance,
@@ -8,6 +9,7 @@ import {
   stepScan,
   sweepSpacingM,
 } from './scanExec'
+import { scanSectorFor } from '../drones/scanSectors'
 import type { DroneTruth } from '../drones/drone'
 import type { GroundTruth } from '../world'
 import type { RectM } from './types'
@@ -42,10 +44,23 @@ describe('lawnmower coverage', () => {
   })
 
   it('keeps every rect point within the detection radius of the path', () => {
-    const rect: RectM = { minX: 0, minY: 0, maxX: 300_000, maxY: 220_000 }
-    const wp = buildLawnmower(rect, { x: 0, y: 0 }, SPACING, 'horizontal')
+    // A fully-inland rect — land-clipping is a no-op here, so the full-coverage
+    // guarantee holds exactly. (Coastal clipping is exercised separately below.)
+    const rect: RectM = { minX: 213_000, minY: 140_000, maxX: 298_000, maxY: 244_000 }
+    const wp = buildLawnmower(rect, { x: rect.minX, y: rect.minY }, SPACING, 'horizontal')
     // Spacing is the detection diameter, so worst-case gap is the radius.
     expect(maxGap(rect, wp, 5_000)).toBeLessThanOrEqual(SPACING / 2 + 1)
+  })
+
+  it('clips the sweep to land so no leg runs out over the ocean', () => {
+    // A west-half sector spans from the coast out to the Pacific (rect.minX = 0).
+    const rect = scanSectorFor('redding-1')!
+    expect(rect.minX).toBe(0)
+    const wp = buildLawnmower(rect, { x: rect.minX, y: rect.minY }, SPACING, 'horizontal')
+    // Every waypoint sits on land...
+    for (const p of wp) expect(isOnLand(p)).toBe(true)
+    // ...and the western turnarounds pull in from the ocean edge to the coast.
+    expect(Math.min(...wp.map((p) => p.x))).toBeGreaterThan(rect.minX)
   })
 
   it('enters from the traversal end nearest the drone', () => {
@@ -92,6 +107,23 @@ describe('lawnmower coverage', () => {
     const v = buildLawnmower(rect, { x: 0, y: 0 }, SPACING, 'vertical')
     expect(v[0].x).toBe(v[1].x)
     expect(v[0].y).not.toBe(v[1].y)
+  })
+})
+
+describe('landExtentAlongAxis', () => {
+  it('pulls a coastal row in from the ocean edge to the coast', () => {
+    const rect = scanSectorFor('redding-1')!
+    const midY = (rect.minY + rect.maxY) / 2
+    const span = landExtentAlongAxis('x', midY, rect.minX, rect.maxX, SPACING / 4)
+    expect(span).not.toBeNull()
+    const [lo, hi] = span!
+    expect(lo).toBeGreaterThan(rect.minX) // clipped east, off the water
+    expect(hi).toBeCloseTo(rect.maxX, 0) // inland edge stays put
+  })
+
+  it('returns null for a row that is entirely water', () => {
+    // Latitude 37.8 (y=0), well west of the coast — all Pacific.
+    expect(landExtentAlongAxis('x', 0, 0, 50_000, 5_000)).toBeNull()
   })
 })
 

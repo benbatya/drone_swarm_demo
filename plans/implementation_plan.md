@@ -1,88 +1,148 @@
-# Basemap — Real Offline Vector Geography (Natural Earth) + Hillshade Toggle
+# Land-clip the lawnmower scan path
 
-## Context
+## Goal
 
-The Fire Season demo currently renders **no real geography**: `MapCanvas.tsx` uses a flat, tile-less MapLibre style (`FLAT_STYLE`, ocean-blue background) and `terrain.ts` draws a single hand-traced California land polygon. That was a deliberate choice — no Mapbox/OSM tiles — to keep the app **keyless, fully offline, and deterministic**, and to protect the Playwright smoke test, which asserts **zero console errors** while the sim runs (a failed tile fetch in headless CI would trip it).
+Drones on their lawnmower sweep currently fly the full rectangular sector,
+including the parts that sit over the Pacific (west-half sectors reach
+`x = 0`, the world's west/coastal edge). That wastes flight time scanning ocean
+the system isn't responsible for.
 
-The operator has no spatial context: no recognizable coastline, water, borders, or cities. Goal: render real geography **underneath the grid** for context, **without** giving up any of the three guarantees above.
-
-**Chosen approach (confirmed with user):**
-- **Default basemap** = bundled real **Natural Earth vector features** (coastline, water, borders, city labels) rendered through deck.gl layers — no runtime tiles/network. Upgrades `terrain.ts` in place.
-- **Optional hillshade** = a **separate bundled terrain-relief data file**, rendered as a raster layer, exposed via a **toggle at the bottom-right of the map**, available on **both** the User Console and God Mode tabs (shared state). Default **off** (vector-only); toggling on adds shaded relief.
-
-All data is bundled/committed and served same-origin — offline boot, no key, and the zero-error E2E gate all stay intact.
+**Per the user's clarification:** the scan *area* stays a **rectangle** — we do
+**not** shrink `scanSectorFor`. Only the *path* changes: each lawnmower leg is
+clipped to the land portion of its row, so the sweep's turnarounds **follow the
+coastline (the boundary zone)** instead of running out to sea. Rows that are
+entirely ocean are dropped.
 
 ## Approach
 
-Render the basemap as the bottom layers of the existing deck.gl stack (below graticule/bases/drones/fires). Everything is imported/bundled — **no external runtime fetch**.
+The single seam is **`buildLawnmower` in `src/sim/directives/scanExec.ts`** — the
+sole waypoint generator. It's called from four places that must stay
+byte-identical (the console dead-reckons a blacked-out drone by *rebuilding the
+same path*):
 
-### 1. Vector data generation (dev-time only → committed GeoJSON)
+- `scanExec.ts` `makeScanExec` (initial) and `stepScan` (rebuild on each re-cover)
+- `src/sim/snapshot.ts:220` (console ghost reconstruction)
+- `src/ui/map/scanZones.ts:57` (map hatch preview)
 
-- New `scripts/build-basemap.mjs` (dev tooling, **not shipped to runtime**): reads Natural Earth 10m source and writes minimal GeoJSON clipped to `BBOX` (from `src/sim/config.ts`, small margin) and simplified (mapshaper visvalingam, ≈500 m tolerance — ~1 px at this zoom).
-  - Physical: `ne_10m_land` (coastline/ocean), `ne_10m_lakes` (Shasta, Tahoe, Clear Lake…), `ne_10m_rivers_lake_centerlines` (Sacramento River…).
-  - Cultural: `ne_10m_admin_1_states_provinces_lines` (**state borders only** — CA/NV/OR, no counties), `ne_10m_urban_areas`, `ne_10m_populated_places` (kept **in full within the bbox** — label every population center).
-  - NE source pulled at generation time from a public-domain mirror (nvkelso/natural-earth-vector or geojson.xyz); optionally `us-atlas` (npm) for state/county lines. Generation network use is **dev-time only**.
-- Committed outputs in `src/ui/map/geo/`: `lakes.json`, `rivers.json`, `states.json`, `urban.json`, `places.json`. The land polygon lives at `src/sim/land.json` (the sim owns it — fires may only ignite on land, see `src/sim/land.ts`; the basemap imports it from there). Est. total **< ~400 KB**.
+Because all four call the same pure function with the same `(rect, spacing,
+orientation)`, making `buildLawnmower` itself land-aware keeps every call site
+consistent automatically — **no call-site changes, no signature change.**
 
-### 2. Hillshade data generation (dev-time only → separate committed raster)
+### 1. New land helper — `src/sim/land.ts`
 
-- New `scripts/build-hillshade.mjs` (dev tooling, separate from the vector script): builds a dark, land-masked hillshade image of the NorCal bbox.
-  - Fetch a DEM for `BBOX` (SRTM/USGS 3DEP or AWS terrarium tiles), run `gdaldem hillshade`, apply a dark C2-toned color ramp, and **mask ocean/water to transparent** (using the land polygon) so the ocean background shows through.
-  - Output in geographic (lng/lat) extent exactly matching `[BBOX.west, BBOX.south, BBOX.east, BBOX.north]`, downsampled to ~1600×1950 px.
-- **Separate committed data file**: `src/ui/map/geo/hillshade.webp` (WebP for size; dark relief compresses well, est. ~0.3–1 MB) — its own file, distinct from the vector GeoJSON. Imported as a vite asset → served **same-origin** at runtime (no external network).
+Add one exported function that keeps land logic in the land layer:
 
-### 3. Render module
+```ts
+/**
+ * Outer on-land extent along `axis` at the fixed cross-coordinate `across`,
+ * within [from, to] (meters). Returns [lo, hi] hugging the coastline, or null
+ * if the whole span is water. Fails OPEN: if land data didn't load, returns
+ * [from, to] (same fallback philosophy as isOnLand).
+ */
+export function landExtentAlongAxis(
+  axis: 'x' | 'y',
+  across: number,
+  from: number,
+  to: number,
+): [number, number] | null
+```
 
-- New `src/ui/map/basemap.ts` exporting `basemapLayers(opts: { hillshade: boolean }): Layer[]`, replacing `terrain.ts`. Ordered bottom→top:
-  1. **land** — `GeoJsonLayer`, dark olive-green fill `[37,51,39]`, coastline stroke `[70,96,82,200]` (the base surface; stays underneath the hillshade so any transparent gaps still read as land).
-  2. **hillshade** (only when `opts.hillshade`) — `BitmapLayer` with `image` = the imported `hillshade.webp`, `bounds: [BBOX.west, BBOX.south, BBOX.east, BBOX.north]`. Land-masked so ocean stays background-blue.
-  3. **urban** — `GeoJsonLayer`, subtle gray fill `[58,64,76,110]`.
-  4. **lakes** — `GeoJsonLayer`, ocean-blue fill so they read as water.
-  5. **rivers** — `GeoJsonLayer`/`PathLayer`, thin blue `[70,110,150]`.
-  6. **states** — `GeoJsonLayer` lines from `ne_10m_admin_1_states_provinces_lines`, muted `[80,100,130,140]`. **State borders only** (CA/NV/OR) — no county lines.
-  7. **places** — `TextLayer` labeling **every** populated place within `BBOX` (all of `ne_10m_populated_places`, not a curated subset), **deduped against base names** (Redding/Chico/Sacramento/Weed are already labeled by `baseLayers()`). Small dot + name per place; if labels overlap at this zoom, apply deck.gl `CollisionFilterExtension` as a follow-up rather than dropping places.
-- Colors matched to the existing dark C2 palette.
+Implementation — **march + bisection**, reusing the existing `isOnLand`:
+- If `POLYS.length === 0` → return `[from, to]` (fail open).
+- Step from `from` to `to` in fine increments (recommend `detectionRadiusM / 2`,
+  ~5 km; sectors are 90–220 km so this is ~20–45 samples/row, cheap). Build a
+  point via `axis === 'x' ? {x:t, y:across} : {x:across, y:t}` and test
+  `isOnLand`. (The step needs `detectionRadiusM`; either pass it in or add a
+  `landExtentAlongAxis(axis, across, from, to, step)` param so `land.ts` stays
+  config-free.)
+- Record the first (`lo0`) and last (`hi0`) on-land sample. If none → `null`.
+- **Bisection-refine** the two coast crossings to ~100 m: between the water
+  sample just before `lo0` and `lo0`, and between `hi0` and the water sample
+  just after, ~8 iterations each. This puts the turnaround right on the coast.
+- Return `[loRefined, hiRefined]`.
 
-### 4. Toggle UI + shared state
+This reuses the tested `isOnLand` rather than adding new polygon-intersection
+math. (Alternative, if we later want exact multi-span precision: analytic
+scanline over `POLYS` outer rings minus holes. Not needed for the coastal case —
+each of these rows is a single land span with the ocean on the west.)
 
-- `src/ui/store.ts` (zustand): add `showHillshade: boolean` (default `false`) + `toggleHillshade()`. Because it lives in the shared `useUIStore`, the setting is **shared across both tabs** and persists when switching.
-- New `src/ui/map/HillshadeToggle.tsx`: a small C2-styled toggle button (label "Terrain") rendered by the shared view so it appears on **both** tabs. Reads/sets `showHillshade`.
-- Position **bottom-right of the map** via a new `.map-toggle` CSS class, absolutely positioned inside `.map-wrap` (left of the 300px side panel), mirroring the existing top-left `.view-title` treatment.
+### 2. Land-clip `buildLawnmower` — `src/sim/directives/scanExec.ts`
 
-### 5. Wiring
+Rework the row loop to clip each row's leg and drop ocean-only rows:
 
-- `src/ui/map/MapCanvas.tsx`: replace both `...terrainLayers()` calls (`:72` truth, `:86` console) with `...basemapLayers({ hillshade: store().showHillshade })`. `rebuild()` already reads `store()` each frame and is subscribed to `useUIStore` changes, so flipping the toggle re-renders immediately (even paused).
-- Render `<HillshadeToggle />` in the shared `SimulationView.tsx` (or the `.map-wrap` in `MapCanvas`) so both tabs show it.
+```ts
+const along = horizontal ? 'x' : 'y'
+const rows: { across: number; lo: number; hi: number }[] = []
+for (let k = 0; k <= n; k++) {
+  const across = Math.min(acrossMin + k * spacing, acrossMax)
+  const span = landExtentAlongAxis(along, across, alongMin, alongMax, step)
+  if (span) rows.push({ across, lo: span[0], hi: span[1] })
+}
+```
 
-## Files
+Then stitch a **boustrophedon over the kept rows only**, alternating by
+kept-row index and joining each new row from the end nearest the previous row's
+last point (so turnarounds stay short and the polyline stays contiguous):
 
-- **new** `scripts/build-basemap.mjs`, `scripts/build-hillshade.mjs` — dev-time generators.
-- **new** `src/ui/map/geo/*.json` — clipped/simplified Natural Earth vector features.
-- **new** `src/ui/map/geo/hillshade.webp` — separate committed hillshade raster.
-- **new** `src/ui/map/basemap.ts` — `basemapLayers({ hillshade })` (replaces `src/ui/map/terrain.ts`).
-- **new** `src/ui/map/HillshadeToggle.tsx` — bottom-right map toggle.
-- **edit** `src/ui/map/MapCanvas.tsx` — swap in `basemapLayers`, pass hillshade flag.
-- **edit** `src/ui/SimulationView.tsx` — mount `<HillshadeToggle />` (shared → both tabs).
-- **edit** `src/ui/store.ts` — `showHillshade` + `toggleHillshade`.
-- **edit** `src/index.css` — `.map-toggle` (bottom-right); optional ocean-color nudge.
-- **edit** `package.json` — devDependency `mapshaper` + DEM/gdal tooling notes + `build:basemap` / `build:hillshade` scripts. Runtime deps unchanged.
-- **new** `src/ui/map/basemap.test.ts` — GeoJSON parses, features within `BBOX`, `basemapLayers()` returns the expected layers with/without the hillshade flag.
+- Row 0: emit `lo → hi` (as `{along, across}` points).
+- Row i>0: start from whichever of `{lo, hi}` is nearer the previous emitted
+  point; emit that end → the other end.
 
-## Reuse
+Keep the existing entry-proximity `reverse()` at the end (unchanged) — it still
+orients the whole path toward `entry`, and the heading-derived direction fix in
+`snapshot.ts` still applies.
 
-- `@deck.gl/layers` `GeoJsonLayer` / `PathLayer` / `TextLayer` / `BitmapLayer` (already installed 9.3.x) — no new runtime deps.
-- `BBOX` from `src/sim/config.ts` for clipping, bitmap bounds, and label filtering.
-- Existing bottom-of-stack layer pattern in `MapCanvas.rebuild()`, the `.view-title` overlay pattern for positioning the toggle, and the `TextLayer` label styling from `baseLayers()`.
+**Fallback / guards:**
+- If **no** row has land (`rows.length === 0`) — shouldn't happen for the real
+  bases, but defensively rebuild the **full rectangle path** (current behavior)
+  so `stepScan` never indexes an empty `waypoints` array. Mirrors the fail-open
+  stance.
+- A single land span per row is assumed (outer extent). A large bay would be
+  overflown rather than woven into — acceptable and arguably desirable at this
+  scale; noted as a known simplification.
+
+### 3. Performance / caching
+
+`buildLawnmower` is now heavier (dozens of `isOnLand` ray-casts) and
+`snapshot.ts` may rebuild it per emit for each disconnected scanning drone.
+The result is deterministic in `(rect, spacing, orientation)`, so **memoize** by
+a key of those three (small `Map` in `scanExec.ts`). This keeps the console ghost
+path cheap and — because it's the same function — identical across call sites.
+(If we skip caching initially, correctness is unchanged; add it if profiling
+shows cost.)
+
+## Tests
+
+- **Update** `src/sim/directives/scanExec.test.ts` `maxGap` (L44–49): it asserts
+  *every* rect point is within detection radius of the path — no longer true for
+  ocean points. Re-scope to "every **on-land** rect point is within detection
+  radius," reusing `isOnLand` like `ignition.test.ts:43-52`.
+- **New** test: no waypoint lies in the ocean — every `buildLawnmower` waypoint
+  satisfies `isOnLand` (within a small coast tolerance), for a known coastal
+  sector (a west-half `scanSectorFor` id).
+- **New** test: `landExtentAlongAxis` returns `null` for an all-ocean row and a
+  sensible `[lo, hi]` for a coastal row.
+- **Keep** `scanSectors.test.ts` unchanged — sectors still tile to the borders
+  (we did not touch `scanSectorFor`).
+- Sanity-check the dead-reckoning tests in `comms.test.ts` still pass (the ghost
+  now follows a coast-clipped path, but the assertions are direction/coverage
+  based, not exact-rectangle based).
 
 ## Verification
 
-- `npm run build` (`tsc --noEmit` + `vite build`) green; bundle stays under the 2000 KB warn (hillshade is a same-origin asset, not a JS chunk).
-- `npm test` (vitest) — existing suite + new `basemap.test.ts`.
-- `npm run test:e2e` (Playwright smoke) — still **zero console errors** (no external network; hillshade loads same-origin); optionally assert the toggle exists on both tabs and flipping it changes the layer set.
-- Manual `npm run dev`: on both tabs, real coastline/rivers/lakes/state borders/city labels render under the grid (dark theme); the bottom-right **Terrain** toggle adds/removes shaded relief and the choice carries across tabs; bases/drones/fires stay legible; pan/zoom still re-renders the graticule.
+1. `npm run build && npm test && npm run test:e2e` (e2e must stay zero-console-error).
+2. `npm run dev` and eyeball a west-coast drone (e.g. a Redding/Weed odd-index
+   drone): its sweep turnarounds should ride the coastline, no legs out over the
+   blue ocean; the sector rectangle overlay is unchanged.
+3. Restart the dev server as the final step.
 
-## Notes / trade-offs
+## Open questions
 
-- Hillshade is **land-masked** so the ocean stays flat background-blue; toggle default **off** (vector-only baseline).
-- The hillshade raster is a fixed-extent image: crisp at bbox scale, softens at extreme zoom (acceptable — operators work at bbox scale). Vector features stay sharp.
-- All Natural Earth + DEM fetching is **build tooling only**; the shipped app remains fully offline and keyless, and both `hillshade.webp` and the GeoJSON are served same-origin.
+- **Coastal margin:** clip exactly at the coast, or leave a small inland/offshore
+  margin (e.g. keep legs `detectionRadiusM` short of the water so the detection
+  disc doesn't spill offshore)? Default plan: clip exactly at the coast — the
+  detection disc naturally covers the shoreline. Easy to add a margin if desired.
+- **Bays:** outer-extent clipping overflies large bays (single span per row). Fine
+  for the demo? Or split into multiple on-land spans per row (more code, gaps in
+  the polyline the helpers must tolerate)? Default: single span.
+- **Caching:** ship the memo in v1, or add only if profiling shows it matters?
