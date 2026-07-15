@@ -23,6 +23,12 @@ test('sim boots, runs >=1000 frames, and advances state with no console errors',
 
   await page.goto('/')
 
+  // The About dialog opens by default on load; dismiss it before interacting.
+  const aboutClose = page.getByTestId('about-close')
+  await expect(aboutClose).toBeVisible()
+  await aboutClose.click()
+  await expect(aboutClose).toBeHidden()
+
   // Tab shell + map mount.
   await page.getByRole('button', { name: 'God Mode' }).click()
   await expect(page.getByTestId('view-title')).toContainText('God Mode')
