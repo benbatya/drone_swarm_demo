@@ -52,8 +52,8 @@ function download(rec: ConsoleDroneRecord, d: DroneTruth, now: number, cfg: SimC
  * docked drones are hard-lined (always connected); airborne drones succeed only
  * outside a dark window. On success it uploads telemetry + fire delta, the
  * console prunes completed/aborted pendings and the drone downloads new ones,
- * then the +32-min cadence resumes. On failure the retry interval halves
- * (16→8→4→2→1) until it succeeds.
+ * then the +32-min cadence resumes. On a blacked-out attempt it re-polls every
+ * syncRetryMin minutes until the link returns.
  */
 export function stepSync(w: GroundTruth): void {
   const now = w.tick
@@ -69,11 +69,13 @@ export function stepSync(w: GroundTruth): void {
 
     const connected = docked || !isDarkAt(c, now)
     if (!connected) {
-      c.retryIntervalMin =
-        c.retryIntervalMin === 0
-          ? cfg.syncRetryStartMin
-          : Math.max(1, Math.floor(c.retryIntervalMin / 2))
-      c.nextSyncAt = now + c.retryIntervalMin
+      // Blacked out at the attempt: re-poll at a short constant interval so the
+      // drone reconnects within ~syncRetryMin of the link returning and never
+      // sleeps through a connected window. (A decreasing/halving backoff would
+      // skip connected windows and let routine outages stack past the missing
+      // threshold — see missingThresholdMin sizing.)
+      c.retryIntervalMin = cfg.syncRetryMin
+      c.nextSyncAt = now + cfg.syncRetryMin
       continue
     }
 

@@ -29,9 +29,10 @@ describe('blackout generation', () => {
     const deep = wins.filter((w) => w.deep)
     expect(routine.length).toBeGreaterThan(0)
     expect(deep.length).toBeGreaterThan(0)
-    // Routine windows never cross the 64-min missing threshold.
+    // Routine windows stay within their bound (≤40 min) — too short, on their
+    // own, to reach the missing threshold.
     for (const w of routine) expect(w.endMin - w.startMin).toBeLessThanOrEqual(cfg.routineDarkMaxMin)
-    // Deep outages exceed it.
+    // Deep outages exceed the missing threshold, so they alone can trip MISSING.
     for (const w of deep) expect(w.endMin - w.startMin).toBeGreaterThan(cfg.missingThresholdMin)
   })
 })
@@ -60,7 +61,7 @@ describe('sync', () => {
     expect(rec.lastContactAt).toBe(65)
   })
 
-  it('halves the retry interval 16→8→4→2→1 while dark', () => {
+  it('re-polls at a constant 3-min retry interval while dark', () => {
     const w = createWorld(cfg0())
     const d = w.drones[0]
     d.comms.darkWindows = alwaysDark()
@@ -77,7 +78,9 @@ describe('sync', () => {
         prev = d.comms.nextSyncAt
       }
     }
-    expect(deltas.slice(0, 6)).toEqual([16, 8, 4, 2, 1, 1])
+    // Constant re-poll: every failed attempt reschedules exactly syncRetryMin (3)
+    // minutes out — no decreasing backoff that could skip a connected window.
+    expect(deltas.slice(0, 6)).toEqual([3, 3, 3, 3, 3, 3])
     // Never contacted the console.
     expect(w.console.drones.get(d.id)!.reported).toBeNull()
   })
@@ -185,8 +188,9 @@ describe('console staleness derivation', () => {
 
   it('reports fresh / stale / missing by contact age', () => {
     expect(stalenessAt(10)).toBe('fresh') // < 40
-    expect(stalenessAt(50)).toBe('stale') // 40 < age <= 64
-    expect(stalenessAt(70)).toBe('missing') // > 64
+    expect(stalenessAt(50)).toBe('stale') // 40 < age <= 76
+    expect(stalenessAt(70)).toBe('stale') // still stale — routine gaps can reach ~75
+    expect(stalenessAt(80)).toBe('missing') // > 76 (deep outage / crash territory)
   })
 })
 
